@@ -1,0 +1,1999 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ScalpSim — Futures Scalping Simulator</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Orbitron:wght@700;900&display=swap');
+:root{
+  --bg:#060810;--bg2:#0a0d14;--bg3:#0e1118;--bg4:#13161f;
+  --panel:#080b12;--border:rgba(0,200,255,0.10);--border2:rgba(0,200,255,0.22);
+  --accent:#00c8ff;--green:#00e676;--red:#ff1744;--yellow:#ffd600;
+  --purple:#d500f9;--orange:#ff6d00;--text:#e8f0fe;--text2:#7986a3;--text3:#2e3a52;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospace;font-size:12px;overflow:hidden;height:100vh;width:100vw;user-select:none;}
+body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.02) 2px,rgba(0,0,0,0.02) 4px);pointer-events:none;z-index:9999;}
+
+/* ── TOPBAR ── */
+.topbar{height:40px;display:flex;align-items:center;gap:10px;padding:0 14px;background:var(--bg2);border-bottom:1px solid var(--border);position:relative;flex-shrink:0;}
+.topbar::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--accent),transparent);}
+.brand{font-family:'Orbitron',monospace;font-size:13px;font-weight:900;color:var(--accent);letter-spacing:0.12em;text-shadow:0 0 20px rgba(0,200,255,0.4);flex-shrink:0;}
+.instrument-tabs{display:flex;gap:3px;margin-left:8px;}
+.itab{padding:3px 12px;border:1px solid var(--border);background:transparent;color:var(--text2);font-family:'JetBrains Mono',monospace;font-size:10px;cursor:pointer;border-radius:2px;transition:all 0.15s;font-weight:600;letter-spacing:0.05em;}
+.itab:hover{border-color:var(--border2);color:var(--text);}
+.itab.active{border-color:var(--accent);color:var(--accent);background:rgba(0,200,255,0.08);}
+.session-info{display:flex;align-items:center;gap:14px;margin-left:auto;font-size:10px;}
+.sdot{width:5px;height:5px;border-radius:50%;background:var(--green);animation:blink 1.5s infinite;display:inline-block;margin-right:4px;}
+@keyframes blink{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(0,230,118,0.5)}50%{opacity:0.6;box-shadow:0 0 0 4px rgba(0,230,118,0)}}
+.sinfo-item{color:var(--text2);}
+.sinfo-item span{color:var(--text);}
+.tbtn2{padding:3px 10px;border:1px solid var(--border2);background:transparent;color:var(--text2);font-family:'JetBrains Mono',monospace;font-size:9px;cursor:pointer;border-radius:2px;transition:all 0.2s;letter-spacing:0.05em;}
+.tbtn2:hover{border-color:var(--accent);color:var(--accent);}
+.tbtn2.tut{color:var(--yellow);border-color:rgba(255,214,0,0.35);}
+
+/* ── MAIN LAYOUT ── */
+.main{display:grid;grid-template-columns:220px 1fr 200px;height:calc(100vh - 40px);overflow:hidden;}
+
+/* ── LEFT: DOM LADDER ── */
+.dom-panel{background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;}
+.dom-header{padding:6px 10px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;}
+.dom-title{font-size:9px;color:var(--text3);letter-spacing:0.1em;text-transform:uppercase;}
+.dom-spread{font-size:9px;color:var(--yellow);}
+.dom-cols{display:grid;grid-template-columns:1fr 44px 1fr;padding:3px 8px;border-bottom:1px solid var(--border);font-size:8px;color:var(--text3);letter-spacing:0.06em;text-transform:uppercase;}
+.dom-cols span:last-child{text-align:right;}
+.dom-cols span:nth-child(2){text-align:center;}
+.dom-list{flex:1;overflow:hidden;display:flex;flex-direction:column;}
+.dom-row{display:grid;grid-template-columns:1fr 44px 1fr;padding:1px 8px;cursor:pointer;transition:background 0.08s;position:relative;min-height:20px;align-items:center;}
+.dom-row:hover{background:rgba(0,200,255,0.05);}
+.dom-row.ask{border-left:2px solid transparent;}
+.dom-row.bid{border-left:2px solid transparent;}
+.dom-row.ask:hover{background:rgba(255,23,68,0.08);border-left-color:var(--red);}
+.dom-row.bid:hover{background:rgba(0,230,118,0.08);border-left-color:var(--green);}
+.dom-row.current-price{background:rgba(0,200,255,0.06);border-left:2px solid var(--accent)!important;}
+.dom-price{font-size:11px;font-weight:600;text-align:center;color:var(--text);cursor:pointer;}
+.dom-price:hover{color:var(--accent);}
+.dom-ask-vol{font-size:9px;color:var(--red);text-align:left;}
+.dom-bid-vol{font-size:9px;color:var(--green);text-align:right;}
+.dom-bar-ask{position:absolute;left:0;top:0;bottom:0;background:rgba(255,23,68,0.12);z-index:0;}
+.dom-bar-bid{position:absolute;right:0;top:0;bottom:0;background:rgba(0,230,118,0.1);z-index:0;}
+.dom-row>*{position:relative;z-index:1;}
+
+/* ── CENTER: CHART + CONTROLS ── */
+.center{display:flex;flex-direction:column;overflow:hidden;}
+/* Price display */
+.price-display{padding:8px 14px;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:20px;flex-shrink:0;}
+.big-price{font-family:'Orbitron',monospace;font-size:32px;font-weight:900;letter-spacing:0.05em;transition:color 0.1s;}
+.big-price.up{color:var(--green);text-shadow:0 0 20px rgba(0,230,118,0.3);}
+.big-price.down{color:var(--red);text-shadow:0 0 20px rgba(255,23,68,0.3);}
+.big-price.flat{color:var(--text);}
+.price-change{display:flex;flex-direction:column;}
+.pc-val{font-size:13px;font-weight:600;}
+.pc-ticks{font-size:10px;color:var(--text2);}
+.instrument-info{display:flex;flex-direction:column;gap:2px;}
+.ii-name{font-family:'Orbitron',monospace;font-size:11px;color:var(--text);letter-spacing:0.08em;}
+.ii-sub{font-size:9px;color:var(--text2);}
+.live-pnl{margin-left:auto;text-align:right;}
+.lp-label{font-size:8px;color:var(--text3);letter-spacing:0.08em;text-transform:uppercase;}
+.lp-value{font-family:'Orbitron',monospace;font-size:22px;font-weight:700;transition:color 0.1s;}
+.lp-value.up{color:var(--green);}
+.lp-value.down{color:var(--red);}
+.lp-value.flat{color:var(--text2);}
+.lp-ticks{font-size:10px;color:var(--text2);}
+/* Chart */
+.chart-wrap{flex:1;position:relative;min-height:0;}
+#chart{width:100%!important;height:100%!important;display:block;}
+/* Controls */
+.controls{padding:8px 14px;background:var(--bg2);border-top:1px solid var(--border);display:flex;gap:8px;align-items:center;flex-shrink:0;}
+.size-selector{display:flex;gap:3px;align-items:center;}
+.size-lbl{font-size:9px;color:var(--text3);margin-right:4px;letter-spacing:0.06em;}
+.size-btn{padding:4px 10px;border:1px solid var(--border);background:transparent;color:var(--text2);font-family:'JetBrains Mono',monospace;font-size:10px;cursor:pointer;border-radius:2px;font-weight:600;transition:all 0.12s;}
+.size-btn:hover{border-color:var(--border2);color:var(--text);}
+.size-btn.active{border-color:var(--accent);color:var(--accent);background:rgba(0,200,255,0.08);}
+.csep{width:1px;height:24px;background:var(--border);margin:0 4px;}
+.buy-btn{flex:1;padding:10px;background:rgba(0,230,118,0.15);border:2px solid var(--green);color:var(--green);font-family:'Orbitron',monospace;font-size:13px;font-weight:900;cursor:pointer;border-radius:3px;letter-spacing:0.1em;transition:all 0.12s;}
+.buy-btn:hover{background:rgba(0,230,118,0.28);box-shadow:0 0 20px rgba(0,230,118,0.2);}
+.buy-btn:active{transform:scale(0.97);}
+.sell-btn{flex:1;padding:10px;background:rgba(255,23,68,0.12);border:2px solid var(--red);color:var(--red);font-family:'Orbitron',monospace;font-size:13px;font-weight:900;cursor:pointer;border-radius:3px;letter-spacing:0.1em;transition:all 0.12s;}
+.sell-btn:hover{background:rgba(255,23,68,0.25);box-shadow:0 0 20px rgba(255,23,68,0.2);}
+.sell-btn:active{transform:scale(0.97);}
+.flat-btn{padding:10px 18px;background:rgba(255,214,0,0.08);border:2px solid rgba(255,214,0,0.5);color:var(--yellow);font-family:'Orbitron',monospace;font-size:11px;font-weight:900;cursor:pointer;border-radius:3px;letter-spacing:0.08em;transition:all 0.12s;}
+.flat-btn:hover{background:rgba(255,214,0,0.18);}
+.flat-btn:active{transform:scale(0.97);}
+.stop-row{display:flex;gap:6px;align-items:center;}
+.stop-inp{width:52px;background:var(--bg3);border:1px solid var(--border);color:var(--text);font-family:'JetBrains Mono',monospace;font-size:11px;padding:4px 6px;border-radius:2px;text-align:center;outline:none;}
+.stop-inp:focus{border-color:var(--accent);}
+.stop-lbl{font-size:9px;color:var(--text3);letter-spacing:0.05em;}
+
+/* ── RIGHT: STATS + LOG ── */
+.right-panel{background:var(--panel);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;}
+.rp-section{padding:8px 10px;border-bottom:1px solid var(--border);}
+.rp-title{font-size:8px;color:var(--text3);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:6px;}
+.session-pnl{font-family:'Orbitron',monospace;font-size:20px;font-weight:700;margin-bottom:2px;}
+.stats-mini{display:grid;grid-template-columns:1fr 1fr;gap:4px;}
+.smc{background:var(--bg3);border:1px solid var(--border);border-radius:2px;padding:5px 7px;}
+.smc-l{font-size:8px;color:var(--text3);letter-spacing:0.06em;text-transform:uppercase;}
+.smc-v{font-size:11px;font-weight:600;margin-top:2px;}
+.trade-log{flex:1;overflow-y:auto;padding:0;}
+.trade-log::-webkit-scrollbar{width:2px;}
+.trade-log::-webkit-scrollbar-thumb{background:var(--border2);}
+.tlog-row{padding:6px 10px;border-bottom:1px solid rgba(0,200,255,0.03);display:grid;grid-template-columns:1fr auto;gap:4px;align-items:center;}
+.tlog-sym{font-size:10px;font-weight:600;color:var(--text);}
+.tlog-detail{font-size:8px;color:var(--text2);}
+.tlog-pnl{font-size:11px;font-weight:700;text-align:right;}
+.tlog-ticks{font-size:8px;color:var(--text2);text-align:right;}
+
+/* ── POSITION BAR ── */
+.pos-bar{padding:5px 14px;background:rgba(0,200,255,0.04);border-top:1px solid var(--border);border-bottom:1px solid var(--border);display:none;align-items:center;gap:16px;flex-shrink:0;}
+.pos-bar.show{display:flex;}
+.pos-indicator{font-size:10px;font-weight:700;letter-spacing:0.06em;}
+.pos-indicator.long{color:var(--green);}
+.pos-indicator.short{color:var(--red);}
+.pos-detail{font-size:9px;color:var(--text2);}
+.pos-timer{font-family:'Orbitron',monospace;font-size:11px;color:var(--yellow);margin-left:auto;}
+
+/* ── TUTORIAL OVERLAY ── */
+.tut-ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:8000;overflow-y:auto;padding:20px;backdrop-filter:blur(6px);}
+.tut-ov.show{display:block;}
+.tut-inner{max-width:860px;margin:0 auto;}
+.tut-header{text-align:center;margin-bottom:24px;}
+.tut-header h1{font-family:'Orbitron',monospace;font-size:20px;color:var(--accent);letter-spacing:0.12em;margin-bottom:6px;}
+.tut-header p{font-size:11px;color:var(--text2);line-height:1.7;}
+.tut-nav{display:flex;gap:6px;justify-content:center;margin-bottom:20px;flex-wrap:wrap;}
+.tnav-btn{padding:5px 16px;border:1px solid var(--border2);background:transparent;color:var(--text2);font-family:'JetBrains Mono',monospace;font-size:10px;cursor:pointer;border-radius:2px;transition:all 0.15s;}
+.tnav-btn:hover{border-color:var(--accent);color:var(--accent);}
+.tnav-btn.active{border-color:var(--accent);color:var(--accent);background:rgba(0,200,255,0.1);}
+.tut-section{display:none;}
+.tut-section.active{display:block;}
+.tut-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-bottom:16px;}
+.tcard{background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:14px;}
+.tcard h3{font-size:10px;font-family:'Orbitron',monospace;color:var(--accent);margin-bottom:8px;letter-spacing:0.07em;}
+.tcard p{font-size:10px;color:var(--text2);line-height:1.7;margin-bottom:6px;}
+.tcard .term{color:var(--yellow);font-weight:600;}
+.tcard .ex{font-size:9px;color:var(--text3);border-left:2px solid var(--border2);padding-left:8px;margin:6px 0;font-style:italic;line-height:1.6;}
+.tcard .rule{font-size:10px;color:var(--green);padding:4px 0;}
+.tcard .warn{font-size:10px;color:var(--red);}
+.tut-close-btn{display:block;margin:16px auto 0;padding:8px 28px;background:transparent;border:1px solid var(--accent);color:var(--accent);font-family:'Orbitron',monospace;font-size:11px;cursor:pointer;border-radius:3px;letter-spacing:0.1em;}
+.tut-close-btn:hover{background:rgba(0,200,255,0.1);}
+.glossary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px;}
+.gterm{background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:10px 12px;}
+.gterm-word{font-size:11px;font-weight:600;color:var(--yellow);margin-bottom:4px;}
+.gterm-def{font-size:10px;color:var(--text2);line-height:1.6;}
+.gterm-ex{font-size:9px;color:var(--text3);font-style:italic;margin-top:3px;}
+.step-list{counter-reset:steps;}
+.step{display:flex;gap:12px;margin-bottom:12px;align-items:flex-start;}
+.step-num{width:24px;height:24px;border-radius:50%;background:rgba(0,200,255,0.15);border:1px solid var(--accent);color:var(--accent);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:'Orbitron',monospace;}
+.step-content h4{font-size:11px;color:var(--text);margin-bottom:3px;}
+.step-content p{font-size:10px;color:var(--text2);line-height:1.6;}
+.rules-list{display:flex;flex-direction:column;gap:8px;}
+.rule-item{display:flex;gap:10px;padding:10px 12px;background:var(--bg3);border-radius:4px;border-left:3px solid;}
+.rule-item.green{border-color:var(--green);}
+.rule-item.red{border-color:var(--red);}
+.rule-item.yellow{border-color:var(--yellow);}
+.rule-icon{font-size:16px;flex-shrink:0;}
+.rule-text h4{font-size:10px;font-weight:600;color:var(--text);margin-bottom:2px;}
+.rule-text p{font-size:9px;color:var(--text2);line-height:1.6;}
+
+/* ── TOAST ── */
+.toast{position:fixed;top:50px;right:14px;background:var(--bg3);border:1px solid var(--border2);border-radius:3px;padding:8px 14px;font-size:10px;opacity:0;transform:translateX(16px);transition:all 0.25s;z-index:9999;pointer-events:none;}
+.toast.show{opacity:1;transform:translateX(0);}
+.toast.ok{border-color:var(--green);color:var(--green);}
+.toast.err{border-color:var(--red);color:var(--red);}
+.toast.info{border-color:var(--yellow);color:var(--yellow);}
+
+/* ── TICK FLASH ── */
+.tick-up{animation:flashUp 0.2s;}
+.tick-down{animation:flashDown 0.2s;}
+@keyframes flashUp{0%{background:rgba(0,230,118,0.2)}100%{background:transparent}}
+@keyframes flashDown{0%{background:rgba(255,23,68,0.2)}100%{background:transparent}}
+
+/* ── ONBOARDING ── */
+.ob-ov{position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:10000;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(8px);}
+.ob-box{background:var(--bg2);border:1px solid var(--border2);border-radius:8px;padding:32px;max-width:440px;width:90%;text-align:center;}
+.ob-box h2{font-family:'Orbitron',monospace;font-size:16px;color:var(--accent);margin-bottom:6px;letter-spacing:0.1em;}
+.ob-box p{font-size:10px;color:var(--text2);margin-bottom:20px;line-height:1.8;}
+.ob-options{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;}
+.ob-opt{padding:14px;background:var(--bg3);border:1px solid var(--border);border-radius:4px;cursor:pointer;transition:all 0.15s;text-align:left;}
+.ob-opt:hover{border-color:var(--accent);background:rgba(0,200,255,0.05);}
+.ob-opt h4{font-size:11px;color:var(--text);margin-bottom:4px;}
+.ob-opt p{font-size:9px;color:var(--text2);margin:0;line-height:1.5;}
+.ob-skip{background:none;border:1px solid var(--border2);color:var(--text2);font-family:'JetBrains Mono',monospace;font-size:10px;padding:6px 20px;cursor:pointer;border-radius:2px;}
+.ob-skip:hover{color:var(--text);}
+
+/* ── NEW FEATURES CSS ── */
+.keybind-ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:8000;overflow-y:auto;padding:20px;backdrop-filter:blur(6px);}
+.keybind-ov.show{display:block;}
+.kb-wrap{max-width:600px;margin:0 auto;background:#0a0d14;border:1px solid rgba(0,200,255,0.2);border-radius:8px;padding:24px;}
+.kb-title{font-family:'Orbitron',monospace;font-size:14px;color:#00c8ff;margin-bottom:16px;letter-spacing:0.1em;}
+.kb-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;}
+.kb-row{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#0e1118;border-radius:4px;border:1px solid #2e3a52;}
+.kb-action{font-size:11px;color:#7986a3;}
+.kb-key{padding:4px 12px;background:#13161f;border:1px solid #363a45;border-radius:3px;color:#e8f0fe;font-family:'JetBrains Mono',monospace;font-size:11px;cursor:pointer;min-width:60px;text-align:center;transition:all 0.15s;}
+.kb-key:hover{border-color:#00c8ff;color:#00c8ff;}
+.kb-key.listening{border-color:#ffd600;color:#ffd600;animation:pulse2 0.8s infinite;}
+@keyframes pulse2{0%,100%{opacity:1}50%{opacity:0.5}}
+.kb-close{width:100%;padding:8px;background:transparent;border:1px solid rgba(0,200,255,0.3);color:#00c8ff;font-family:'Orbitron',monospace;font-size:10px;cursor:pointer;border-radius:4px;letter-spacing:0.08em;}
+/* equity curve */
+.equity-wrap{padding:6px 10px;border-bottom:1px solid #2e3a52;flex-shrink:0;}
+.equity-lbl{font-size:8px;color:#2e3a52;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:4px;}
+#equityCanvas{display:block;width:100%;height:50px;}
+/* news flash */
+.news-flash{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#0a0d14;border:2px solid #ffd600;border-radius:8px;padding:20px 28px;z-index:7000;text-align:center;pointer-events:none;}
+.news-flash.show{display:block;}
+.nf-warning{font-size:11px;color:#ffd600;letter-spacing:0.1em;margin-bottom:6px;animation:pulse2 0.5s infinite;}
+.nf-title{font-family:'Orbitron',monospace;font-size:16px;color:#e8f0fe;margin-bottom:4px;}
+.nf-impact{font-size:12px;margin-top:6px;font-weight:600;}
+/* session badge */
+.session-badge{padding:2px 8px;border-radius:10px;font-size:9px;font-weight:600;letter-spacing:0.06em;}
+.sb-rth{background:rgba(0,230,118,0.15);color:#00e676;border:1px solid rgba(0,230,118,0.3);}
+.sb-globex{background:rgba(145,158,172,0.1);color:#7986a3;border:1px solid rgba(145,158,172,0.2);}
+.sb-lunch{background:rgba(255,214,0,0.1);color:#ffd600;border:1px solid rgba(255,214,0,0.2);}
+/* extra controls */
+.extra-controls{display:flex;gap:5px;flex-wrap:wrap;}
+.xbtn{padding:4px 10px;border:1px solid #2e3a52;background:transparent;color:#4a5060;font-family:'JetBrains Mono',monospace;font-size:9px;cursor:pointer;border-radius:2px;transition:all 0.15s;white-space:nowrap;}
+.xbtn:hover{border-color:#00c8ff;color:#00c8ff;}
+.xbtn.on{border-color:#ffd600;color:#ffd600;background:rgba(255,214,0,0.06);}
+.xbtn.on-g{border-color:#00e676;color:#00e676;background:rgba(0,230,118,0.06);}
+.xbtn.on-r{border-color:#ff1744;color:#ff1744;background:rgba(255,23,68,0.06);}
+/* partial/trail buttons */
+.partial-btn{flex:1;padding:7px;background:rgba(255,214,0,0.08);border:1px solid rgba(255,214,0,0.3);color:#ffd600;font-family:'Orbitron',monospace;font-size:9px;cursor:pointer;border-radius:2px;transition:all 0.15s;font-weight:700;letter-spacing:0.06em;}
+.partial-btn:hover{background:rgba(255,214,0,0.16);}
+.trail-btn{flex:1;padding:7px;background:rgba(0,200,255,0.06);border:1px solid rgba(0,200,255,0.25);color:#00c8ff;font-family:'Orbitron',monospace;font-size:9px;cursor:pointer;border-radius:2px;transition:all 0.15s;font-weight:700;letter-spacing:0.06em;}
+.trail-btn.on{background:rgba(0,200,255,0.15);border-color:#00c8ff;}
+.trail-btn:hover{background:rgba(0,200,255,0.12);}
+/* streak display */
+.streak-row{display:flex;gap:5px;margin-top:5px;}
+.streak-card{flex:1;background:#0e1118;border:1px solid #2e3a52;border-radius:2px;padding:4px 6px;text-align:center;}
+.streak-card .sl{font-size:8px;color:#2e3a52;letter-spacing:0.06em;}
+.streak-card .sv{font-size:11px;font-weight:600;margin-top:1px;}
+
+
+/* ── DRAWING TOOLBAR ── */
+.draw-bar{display:flex;align-items:center;gap:3px;padding:4px 10px;background:#080b12;border-bottom:1px solid #2e3a52;flex-shrink:0;flex-wrap:wrap;}
+.draw-bar-lbl{font-size:8px;color:#2e3a52;letter-spacing:0.1em;text-transform:uppercase;margin-right:4px;flex-shrink:0;}
+.dtool{padding:3px 9px;border:1px solid #2e3a52;background:transparent;color:#4a5060;font-family:'JetBrains Mono',monospace;font-size:9px;cursor:pointer;border-radius:2px;transition:all 0.12s;white-space:nowrap;}
+.dtool:hover{border-color:#7986a3;color:#7986a3;}
+.dtool.active{border-color:#00c8ff;color:#00c8ff;background:rgba(0,200,255,0.08);}
+.dtool.danger{border-color:rgba(255,23,68,0.3);color:#ff1744;}
+.dtool.danger:hover{background:rgba(255,23,68,0.08);}
+.dsep{width:1px;height:16px;background:#2e3a52;margin:0 3px;flex-shrink:0;}
+.draw-hint{font-size:8px;color:#2e3a52;font-style:italic;margin-left:4px;}
+#drawCanvas{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:11;display:block;}
+#drawCanvas.draw-active{pointer-events:all;cursor:crosshair;}
+
+</style>
+</head>
+<body>
+<!-- ONBOARDING -->
+<div class="ob-ov" id="obOv">
+  <div class="ob-box">
+    <h2>SCALPSIM</h2>
+    <p>The most realistic futures scalping simulator.<br>Are you new to scalping or have some experience?</p>
+    <div class="ob-options">
+      <div class="ob-opt" onclick="startSim(true)">
+        <h4>🎓 New to this</h4>
+        <p>Show me the full tutorial first, then let me practice</p>
+      </div>
+      <div class="ob-opt" onclick="startSim(false)">
+        <h4>⚡ I know the basics</h4>
+        <p>Skip straight to trading, I'll figure it out</p>
+      </div>
+    </div>
+    <button class="ob-skip" onclick="startSim(false)">Skip intro</button>
+  </div>
+</div>
+
+<!-- TUTORIAL OVERLAY -->
+<div class="tut-ov" id="tutOv">
+  <div class="tut-inner">
+    <div class="tut-header">
+      <h1>SCALPING ACADEMY</h1>
+      <p>Everything you need to know to trade futures like a professional scalper</p>
+    </div>
+    <div class="tut-nav">
+      <button class="tnav-btn active" onclick="showTutSection(0,this)">1 · What is Scalping</button>
+      <button class="tnav-btn" onclick="showTutSection(1,this)">2 · Futures 101</button>
+      <button class="tnav-btn" onclick="showTutSection(2,this)">3 · Glossary</button>
+      <button class="tnav-btn" onclick="showTutSection(3,this)">4 · The DOM</button>
+      <button class="tnav-btn" onclick="showTutSection(4,this)">5 · How to Scalp</button>
+      <button class="tnav-btn" onclick="showTutSection(5,this)">6 · Pro Rules</button>
+    </div>
+
+    <!-- SECTION 0: WHAT IS SCALPING -->
+    <div class="tut-section active" id="ts0">
+      <div class="tut-grid">
+        <div class="tcard" style="border-color:rgba(0,200,255,0.3);">
+          <h3>What is Scalping?</h3>
+          <p>Scalping is a trading style where you make <span class="term">many small trades</span> throughout the day, holding each one for only <span class="term">seconds to a few minutes</span>. You're not trying to catch a big move — you're grabbing tiny profits over and over.</p>
+          <div class="ex">Imagine a poker player who wins $5 on most hands instead of waiting for one huge pot. The small wins add up fast with enough volume.</div>
+          <p>A professional scalper might make <span class="term">30–150 trades per day</span>, each targeting just 2–6 ticks of profit. That's $25–$75 per trade on ES. Do that 50 times and you've made $1,250–$3,750 in a single day.</p>
+        </div>
+        <div class="tcard" style="border-color:rgba(0,230,118,0.3);">
+          <h3>Why Scalp Futures?</h3>
+          <p><span class="term">Speed</span> — Futures react to news before stocks do. You can be in and out before most people even see the candle form.</p>
+          <p><span class="term">Leverage</span> — Control a $250,000 position with $500 of margin. This magnifies tiny moves into real money.</p>
+          <p><span class="term">Liquidity</span> — ES (S&P 500 futures) trades millions of contracts daily. You can enter and exit instantly at any size without moving the market.</p>
+          <p><span class="term">24hr market</span> — Futures trade nearly around the clock. You can scalp at 3am if you want.</p>
+          <div class="ex">ES trades roughly $150 billion in notional value every single day — more than most stocks combined.</div>
+        </div>
+        <div class="tcard" style="border-color:rgba(255,23,68,0.3);">
+          <h3>The Hard Truth</h3>
+          <p>Scalping is one of the <span class="term">hardest trading styles</span> to master. Most retail traders lose money scalping because:</p>
+          <p class="warn">• The spread and commissions eat into tiny profits</p>
+          <p class="warn">• Emotions cause you to hold losers too long</p>
+          <p class="warn">• Overtrading — taking bad setups out of boredom</p>
+          <p class="warn">• Not having a clear "wrong" level to exit at</p>
+          <div class="ex">The good news: this is a simulator. Blow up your account 100 times here until you get it right — that's the entire point.</div>
+        </div>
+        <div class="tcard" style="border-color:rgba(255,214,0,0.3);">
+          <h3>Scalping vs Other Styles</h3>
+          <p><span class="term">Scalping</span> — Seconds to minutes. 2–6 tick target. Many trades/day.</p>
+          <p><span class="term">Day Trading</span> — Minutes to hours. Bigger moves. Flat by close.</p>
+          <p><span class="term">Swing Trading</span> — Days to weeks. Big moves. Holds overnight.</p>
+          <p><span class="term">Investing</span> — Years. Doesn't care about daily noise.</p>
+          <div class="ex">Most traders on YouTube are swing traders or investors. True scalping at the professional level looks very different — fast, disciplined, mechanical.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SECTION 1: FUTURES 101 -->
+    <div class="tut-section" id="ts1">
+      <div class="tut-grid">
+        <div class="tcard" style="border-color:rgba(0,200,255,0.3);">
+          <h3>What is a Futures Contract?</h3>
+          <p>A futures contract is an agreement to buy or sell an asset at a <span class="term">specific price on a specific future date</span>. You don't own the asset — you own the contract.</p>
+          <div class="ex">Like putting a deposit on a house that's being built. You lock in today's price to buy it in 3 months. If prices go up, your contract is worth more. If they go down, it's worth less.</div>
+          <p>As a scalper you almost never hold to expiration — you're in and out in seconds, just profiting from the price movement of the contract itself.</p>
+        </div>
+        <div class="tcard" style="border-color:rgba(0,230,118,0.3);">
+          <h3>ES — The King of Scalping</h3>
+          <p>The <span class="term">E-mini S&P 500 (ES)</span> is the most traded futures contract in the world. It tracks the S&P 500 index.</p>
+          <p><span class="term">Tick size:</span> 0.25 points = <span class="term">$12.50 per tick</span></p>
+          <p><span class="term">1 point</span> = 4 ticks = $50.00</p>
+          <p><span class="term">Margin:</span> ~$500 per contract (varies by broker)</p>
+          <p>So if ES moves 4 ticks (1 full point) in your favor, you make $50. On 5 contracts that's $250 in seconds.</p>
+          <div class="ex">On a normal day ES moves 20–60 points. Scalpers try to capture 2–4 point moves repeatedly throughout the session.</div>
+        </div>
+        <div class="tcard" style="border-color:rgba(213,0,249,0.3);">
+          <h3>NQ — High Octane</h3>
+          <p>The <span class="term">E-mini Nasdaq (NQ)</span> tracks the Nasdaq 100. It's more volatile than ES — bigger moves, bigger risk.</p>
+          <p><span class="term">Tick size:</span> 0.25 points = <span class="term">$5.00 per tick</span></p>
+          <p><span class="term">1 point</span> = 4 ticks = $20.00</p>
+          <p>NQ can move 100+ points in minutes during major news. Great for scalping big tech earnings. More experienced scalpers prefer NQ for larger swings.</p>
+          <div class="ex">When Apple or NVIDIA releases earnings, NQ can spike or drop 200 points in seconds. That's $4,000 per contract.</div>
+        </div>
+        <div class="tcard" style="border-color:rgba(255,109,0,0.3);">
+          <h3>Other Instruments</h3>
+          <p><span class="term">CL (Crude Oil)</span> — Very volatile. Reacts to geopolitical news, supply data. $10/tick. Pros love it.</p>
+          <p><span class="term">GC (Gold)</span> — Safe haven. Spikes during market fear or dollar weakness. $10/tick.</p>
+          <p><span class="term">BTC Futures</span> — Extreme volatility. Trades 24/7. High risk, high reward.</p>
+          <p><span class="term">EUR/USD</span> — Forex pair. Moves in pips. Most liquid currency pair in the world.</p>
+          <div class="ex">Most beginner scalpers start with ES because it's the most predictable and has the most educational resources available.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SECTION 2: GLOSSARY -->
+    <div class="tut-section" id="ts2">
+      <div class="glossary-grid">
+        <div class="gterm"><div class="gterm-word">Tick</div><div class="gterm-def">The smallest possible price movement for a futures contract.</div><div class="gterm-ex">ES tick = 0.25 points = $12.50. Move 4 ticks = $50.</div></div>
+        <div class="gterm"><div class="gterm-word">Point</div><div class="gterm-def">Equal to 4 ticks. A common way pros talk about moves.</div><div class="gterm-ex">"I made 3 points on that trade" = 12 ticks = $150 on ES.</div></div>
+        <div class="gterm"><div class="gterm-word">Bid</div><div class="gterm-def">The highest price a buyer is willing to pay right now.</div><div class="gterm-ex">If the bid is 5000.00, someone will buy from you at that price instantly.</div></div>
+        <div class="gterm"><div class="gterm-word">Ask</div><div class="gterm-def">The lowest price a seller will accept right now.</div><div class="gterm-ex">If the ask is 5000.25, you can buy at that price right now.</div></div>
+        <div class="gterm"><div class="gterm-word">Spread</div><div class="gterm-def">The gap between bid and ask. The cost of entry.</div><div class="gterm-ex">Bid 5000.00 / Ask 5000.25 = 1 tick spread = $12.50 cost just to get in.</div></div>
+        <div class="gterm"><div class="gterm-word">DOM</div><div class="gterm-def">Depth of Market. Shows all pending buy and sell orders at each price level.</div><div class="gterm-ex">Big numbers at a price = a "wall." Price often stalls or bounces off walls.</div></div>
+        <div class="gterm"><div class="gterm-word">Long</div><div class="gterm-def">You bought a contract. You profit if price goes UP.</div><div class="gterm-ex">"I'm long 2 ES" = I bought 2 contracts, hoping the S&P goes up.</div></div>
+        <div class="gterm"><div class="gterm-word">Short</div><div class="gterm-def">You sold a contract you don't own. You profit if price goes DOWN.</div><div class="gterm-ex">"I'm short 1 NQ" = I sold 1 Nasdaq contract, hoping it drops.</div></div>
+        <div class="gterm"><div class="gterm-word">Flat</div><div class="gterm-def">No open position. You're out of the market entirely.</div><div class="gterm-ex">Pros say "get flat" when they want to close everything immediately.</div></div>
+        <div class="gterm"><div class="gterm-word">Fill</div><div class="gterm-def">Your order was executed at the exchange.</div><div class="gterm-ex">"I got filled at 5001.50" = my buy order executed at that price.</div></div>
+        <div class="gterm"><div class="gterm-word">Slippage</div><div class="gterm-def">Getting filled at a worse price than expected during fast markets.</div><div class="gterm-ex">You tried to buy at 5000.25 but the market moved fast and you got filled at 5000.75. That's 2 ticks of slippage.</div></div>
+        <div class="gterm"><div class="gterm-word">Mark to Market</div><div class="gterm-def">Your P&L updates live every tick while you hold a position.</div><div class="gterm-ex">You're long 1 ES at 5000. It moves to 5002 = +$100 unrealized. It's not yours until you close.</div></div>
+        <div class="gterm"><div class="gterm-word">Stop Loss</div><div class="gterm-def">An automatic exit order triggered if price moves against you by X ticks.</div><div class="gterm-ex">Long ES at 5000 with a 4-tick stop = auto-exit at 4999.00. Max loss = $50.</div></div>
+        <div class="gterm"><div class="gterm-word">Target</div><div class="gterm-def">Your planned exit price for profit. Set before entering.</div><div class="gterm-ex">"My target is 4 ticks" = I'll close when price moves 4 ticks in my favor.</div></div>
+        <div class="gterm"><div class="gterm-word">Margin</div><div class="gterm-def">The deposit required to hold a futures contract. Much less than the contract's value.</div><div class="gterm-ex">ES is worth ~$250,000 but only requires ~$500 margin. That's 500:1 leverage.</div></div>
+        <div class="gterm"><div class="gterm-word">Leverage</div><div class="gterm-def">Controlling a large position with a small deposit. Amplifies gains AND losses.</div><div class="gterm-ex">$500 controlling $250,000 = any 1% move in the asset = 500% move on your margin.</div></div>
+        <div class="gterm"><div class="gterm-word">Drawdown</div><div class="gterm-def">How far your account dropped from its highest point.</div><div class="gterm-ex">Account peaked at $30,000 then dropped to $27,000 = 10% drawdown. Most prop firms cut you off at 5-10%.</div></div>
+        <div class="gterm"><div class="gterm-word">RTH</div><div class="gterm-def">Regular Trading Hours. 9:30am–4:00pm EST for US futures.</div><div class="gterm-ex">Most volume and best setups happen during RTH. Globex (overnight) is thinner and trickier.</div></div>
+        <div class="gterm"><div class="gterm-word">Prop Firm</div><div class="gterm-def">A company that gives you their capital to trade after you pass an evaluation.</div><div class="gterm-ex">Topstep, Apex Trader Funding, FTMO. Pass the eval → trade $50K–$200K → keep 70-90% of profits.</div></div>
+        <div class="gterm"><div class="gterm-word">Funded Account</div><div class="gterm-def">A prop firm account where you trade the firm's money, not your own.</div><div class="gterm-ex">The dream for most retail traders. You risk none of your own money but share in the profits.</div></div>
+        <div class="gterm"><div class="gterm-word">Tick Value</div><div class="gterm-def">How many dollars one tick movement is worth.</div><div class="gterm-ex">ES = $12.50/tick. NQ = $5/tick. CL = $10/tick. GC = $10/tick.</div></div>
+        <div class="gterm"><div class="gterm-word">Session P&L</div><div class="gterm-def">Total profit or loss for the current trading day only.</div><div class="gterm-ex">Most scalpers set a daily profit target (e.g. +$500) and a loss limit (e.g. -$200). Hit either = stop trading.</div></div>
+      </div>
+    </div>
+
+    <!-- SECTION 3: THE DOM -->
+    <div class="tut-section" id="ts3">
+      <div class="tut-grid">
+        <div class="tcard" style="border-color:rgba(0,200,255,0.3);grid-column:span 2;">
+          <h3>The DOM — Your Most Important Tool</h3>
+          <p>The <span class="term">Depth of Market (DOM)</span> — also called the order book or ladder — is a live list of every pending buy and sell order at every price level. It's the single most important tool for a futures scalper.</p>
+          <p>The DOM has three columns:</p>
+          <p><span class="term">Left (Ask volume — red)</span> — The number of contracts people want to SELL at each price. These are your sellers. To go long (buy), you need to get through the ask side.</p>
+          <p><span class="term">Center (Price)</span> — The price level. Click it to enter a trade at that price. Prices update every fraction of a second.</p>
+          <p><span class="term">Right (Bid volume — green)</span> — The number of contracts people want to BUY at each price. These are your buyers. To go short (sell), you need to get through the bid side.</p>
+          <div class="ex">Imagine an auction. The DOM shows you every hand raised to bid, and every seller shouting their price. You can see the whole room at once.</div>
+        </div>
+        <div class="tcard" style="border-color:rgba(255,214,0,0.3);">
+          <h3>Reading the DOM</h3>
+          <p><span class="term">Large number at a price</span> = a "wall" or "iceberg." Price tends to stall or reverse here because there's a lot of supply or demand to work through.</p>
+          <p><span class="term">Numbers disappearing fast</span> = orders being pulled. Someone big was protecting that level but just left — could mean a breakout is coming.</p>
+          <p><span class="term">Price prints</span> = trades that actually happened. The DOM shows pending orders; actual trades are shown in the "Time & Sales" tape.</p>
+          <div class="ex">If you see 2,000 contracts sitting at the ask of 5000.00 and price keeps bouncing off it, that's a huge sell wall. Don't try to break through it — trade with it by selling the bounces.</div>
+        </div>
+        <div class="tcard" style="border-color:rgba(0,230,118,0.3);">
+          <h3>Using the DOM to Trade</h3>
+          <p><span class="term">In this simulator</span>, the DOM shows 20 price levels above and below the current price, updating live every tick.</p>
+          <p><span class="rule">• Click any price row to enter a limit order at that price</span></p>
+          <p><span class="rule">• Hit the big green BUY button to buy at the current ask instantly</span></p>
+          <p><span class="rule">• Hit the big red SELL button to sell at the current bid instantly</span></p>
+          <p><span class="rule">• Hit FLAT to close your entire position immediately at market</span></p>
+          <p><span class="term">Watch the DOM while in a trade</span> — if big ask volume appears above you while long, consider exiting before it blocks your move.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- SECTION 4: HOW TO SCALP -->
+    <div class="tut-section" id="ts4">
+      <div class="step-list">
+        <div class="step"><div class="step-num">1</div><div class="step-content"><h4>Pick ONE instrument and master it</h4><p>Start with ES. Watch it for days before trading. Learn its rhythm — how fast it moves, when it speeds up (market open, news), when it slows down (lunch hour). Most professional scalpers only trade 1-2 instruments their entire career.</p></div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-content"><h4>Identify your key levels BEFORE the session</h4><p>Before you trade, mark the previous day's high and low, the overnight high and low, and round numbers (5000, 5050, 5100 on ES). Price reacts at these levels because everyone can see them. These are your roadmap.</p></div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-content"><h4>Watch for price approaching a level</h4><p>Don't just randomly click buy and sell. Wait for price to approach one of your levels. At that level, watch the DOM — does big bid volume appear? Do sellers dry up? Does price start consolidating (bouncing in a tight range)? These are entry signals.</p></div></div>
+        <div class="step"><div class="step-num">4</div><div class="step-content"><h4>Define your stop BEFORE entering</h4><p>Before you click buy or sell, decide: "If price goes X ticks against me, I'm wrong and I get out." Set your stop. 4-6 ticks is standard for ES scalping. This keeps one bad trade from destroying your day. No stop = gambling, not trading.</p></div></div>
+        <div class="step"><div class="step-num">5</div><div class="step-content"><h4>Enter with conviction — one click</h4><p>When your setup is there, click immediately. Hesitation costs ticks. Hit the BUY or SELL button, not a limit order in a fast market. You can always miss a tick getting in, but a missed entry means no trade at all.</p></div></div>
+        <div class="step"><div class="step-num">6</div><div class="step-content"><h4>Manage the trade — don't watch P&L</h4><p>While in a trade, watch PRICE — not your dollar P&L. The P&L number will mess with your emotions. Focus on whether price is moving toward your target or toward your stop. Make your decision based on price action, not fear or greed.</p></div></div>
+        <div class="step"><div class="step-num">7</div><div class="step-content"><h4>Exit clean — take your target or your stop</h4><p>When price hits your target, click FLAT immediately. Don't get greedy and let it run — scalping is about consistent small wins. If your stop hits, accept it and move on. One loss means nothing if you have a positive expectancy over 100 trades.</p></div></div>
+        <div class="step"><div class="step-num">8</div><div class="step-content"><h4>Review every trade</h4><p>After your session, look at your log. Why did you win? Why did you lose? Were you following your rules? Most professionals journal every trade. Patterns emerge — you'll notice you always lose after a big winner, or you always nail the open. Use that data.</p></div></div>
+      </div>
+    </div>
+
+    <!-- SECTION 5: PRO RULES -->
+    <div class="tut-section" id="ts5">
+      <div class="rules-list">
+        <div class="rule-item green"><div class="rule-icon">✅</div><div class="rule-text"><h4>Always know your stop before entering</h4><p>If you don't know where you're wrong before you click, you're gambling. Every single professional scalper has a defined maximum loss per trade. Usually 4–8 ticks on ES. That's $50–$100 max risk per trade.</p></div></div>
+        <div class="rule-item green"><div class="rule-icon">✅</div><div class="rule-text"><h4>Trade with the trend on the 1-minute chart</h4><p>Look at the 1-minute candles. Are they making higher highs and higher lows? That's an uptrend — only take long setups. Making lower lows? Only short. Fighting the trend is the fastest way to lose money scalping.</p></div></div>
+        <div class="rule-item green"><div class="rule-icon">✅</div><div class="rule-text"><h4>Trade the open (9:30–11:30 EST) and close (3–4 EST)</h4><p>These are the highest-volume periods. More volume = cleaner price action = easier setups. The lunch hour (12–2 EST) is the graveyard of scalpers — choppy, random, no follow-through. Most pros simply stop trading at 11:30 and come back at 3pm.</p></div></div>
+        <div class="rule-item green"><div class="rule-icon">✅</div><div class="rule-text"><h4>Set a daily loss limit and respect it</h4><p>Decide before you start: "If I lose $X today, I stop trading." Most prop firms enforce 5% daily drawdown. Even without one, set your own. Three losing trades in a row means something is off — step away. You can always come back tomorrow.</p></div></div>
+        <div class="rule-item red"><div class="rule-icon">❌</div><div class="rule-text"><h4>Never hold through major news events</h4><p>Fed rate decisions, CPI, Non-Farm Payrolls — these move markets 20–50+ points in milliseconds. No scalper can react fast enough. Get flat 5 minutes before any major event. The move after will be violent and unreliable. Let it settle, then re-enter.</p></div></div>
+        <div class="rule-item red"><div class="rule-icon">❌</div><div class="rule-text"><h4>Never revenge trade</h4><p>You took a loss. Now you want to "make it back" by immediately taking a bigger trade. This is revenge trading and it kills accounts. The market doesn't know you lost. It doesn't owe you anything. Take a break, reset, come back neutral.</p></div></div>
+        <div class="rule-item red"><div class="rule-icon">❌</div><div class="rule-text"><h4>Never move your stop loss further away</h4><p>Your stop is where you're wrong. Moving it further when price approaches it is just delaying the loss while making it bigger. This is how $50 losses turn into $500 losses. Set it. Honor it. No exceptions.</p></div></div>
+        <div class="rule-item yellow"><div class="rule-icon">⚡</div><div class="rule-text"><h4>Watch round numbers — they're magnetic</h4><p>ES at 5000, 5050, 5100. NQ at 18000, 18500. These numbers attract price like magnets because every trader on Earth has them marked. Entries near round numbers that hold have extremely high win rates.</p></div></div>
+        <div class="rule-item yellow"><div class="rule-icon">⚡</div><div class="rule-text"><h4>Size up only after proving consistency</h4><p>Start with 1 contract. Be profitable over 50 trades before adding a second. Be profitable over 100 trades before adding a third. Most failing traders try to trade 10 contracts before they've proven they can make money with 1. The size doesn't change the skill — it just changes the emotional pressure.</p></div></div>
+        <div class="rule-item yellow"><div class="rule-icon">⚡</div><div class="rule-text"><h4>Your only job is process, not P&L</h4><p>Focus on taking good setups with defined risk. The money is a byproduct of doing the right thing consistently. Traders who focus on P&L make emotional decisions. Traders who focus on process make mechanical ones. Mechanical wins over time.</p></div></div>
+      </div>
+    </div>
+
+    <button class="tut-close-btn" onclick="closeTutorial()">START TRADING →</button>
+  </div>
+</div>
+
+<!-- MAIN APP -->
+<div id="appMain" style="display:none;flex-direction:column;height:100vh;">
+  <div class="topbar">
+    <div class="brand">SCALPSIM</div>
+    <div class="instrument-tabs" id="instrTabs" style="flex-wrap:wrap;gap:2px;">
+      <button class="itab active" onclick="setInstrument('ES',this)">ES</button>
+      <button class="itab" onclick="setInstrument('NQ',this)">NQ</button>
+      <button class="itab" onclick="setInstrument('MES',this)" title="Micro S&P — $1.25/tick, great for beginners">MES</button>
+      <button class="itab" onclick="setInstrument('MNQ',this)" title="Micro Nasdaq — $0.50/tick">MNQ</button>
+      <button class="itab" onclick="setInstrument('YM',this)" title="Dow Jones — $5/tick">YM</button>
+      <button class="itab" onclick="setInstrument('RTY',this)" title="Russell 2000 — $5/tick">RTY</button>
+      <button class="itab" onclick="setInstrument('CL',this)">CL</button>
+      <button class="itab" onclick="setInstrument('GC',this)">GC</button>
+      <button class="itab" onclick="setInstrument('BTC',this)">BTC</button>
+      <button class="itab" onclick="setInstrument('EURUSD',this)">EUR/USD</button>
+    </div>
+    <div class="session-info">
+      <div class="sinfo-item"><span class="sdot"></span>LIVE</div>
+      <div class="sinfo-item"><span id="sessionBadge" class="session-badge sb-rth">RTH</span></div>
+      <div class="sinfo-item" id="volatilityLabel" style="font-size:9px;color:#4a5060;">VOL: NORMAL</div>
+      <div class="sinfo-item">Balance: <span id="balLabel" style="color:var(--accent);">$25,000</span></div>
+      <div class="sinfo-item" id="dailyPnlLabel" style="color:var(--text2);">Day: $0.00</div>
+      <div class="clock" id="clock" style="font-family:'Orbitron',monospace;font-size:10px;color:var(--accent);"></div>
+      <button class="tbtn2 tut" onclick="document.getElementById('tutOv').classList.add('show');showTutSection(0,document.querySelector('.tnav-btn'))">📚 Tutorial</button>
+      <button class="tbtn2" onclick="resetSession()" style="color:var(--red);border-color:rgba(255,23,68,0.3);">↺ Reset</button>
+    </div>
+  </div>
+
+  <div class="main">
+    <!-- DOM LADDER -->
+    <div class="dom-panel">
+      <div class="dom-header">
+        <div class="dom-title">Order Book</div>
+        <div class="dom-spread" id="domSpread">Spread: 1 tick</div>
+      </div>
+      <div class="dom-cols"><span>Ask Vol</span><span>Price</span><span>Bid Vol</span></div>
+      <div class="dom-list" id="domList"></div>
+    </div>
+
+    <!-- CENTER -->
+    <div class="center">
+      <div class="price-display">
+        <div class="instrument-info">
+          <div class="ii-name" id="instrName">ES</div>
+          <div class="ii-sub" id="instrSub">E-mini S&P 500 · $12.50/tick</div>
+        </div>
+        <div>
+          <div class="big-price flat" id="bigPrice">5,284.25</div>
+          <div style="display:flex;gap:10px;align-items:center;margin-top:2px;">
+            <div class="pc-val" id="priceChange" style="color:var(--text2);">+0.00</div>
+            <div class="pc-ticks" id="tickChange">0 ticks</div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <div style="font-size:9px;color:var(--text3);">HIGH <span id="dayHigh" style="color:var(--green);">—</span></div>
+          <div style="font-size:9px;color:var(--text3);">LOW &nbsp;<span id="dayLow" style="color:var(--red);">—</span></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <div style="font-size:9px;color:var(--text3);">VWAP <span id="vwapLabel" style="color:var(--yellow);">—</span></div>
+          <div style="font-size:9px;color:var(--text3);">VOL &nbsp;<span id="volLabel" style="color:var(--text2);">—</span></div>
+        </div>
+        <div class="live-pnl">
+          <div class="lp-label">LIVE P&L</div>
+          <div class="lp-value flat" id="livePnl">$0.00</div>
+          <div class="lp-ticks" id="liveTicks">0 ticks</div>
+        </div>
+      </div>
+
+      <div class="pos-bar" id="posBar">
+        <div class="pos-indicator" id="posIndicator">FLAT</div>
+        <div class="pos-detail" id="posDetail">—</div>
+        <div class="pos-timer" id="posTimer">0:00</div>
+      </div>
+
+      <!-- DRAWING TOOLBAR -->
+      <div class="draw-bar" id="drawBar">
+        <span class="draw-bar-lbl">DRAW:</span>
+        <button class="dtool active" id="dtnone" onclick="setDraw('none')" title="Disable drawing / select mode">✕ Off</button>
+        <button class="dtool" id="dthline" onclick="setDraw('hline')" title="Horizontal line — mark support/resistance levels">― H-Line</button>
+        <button class="dtool" id="dtvline" onclick="setDraw('vline')" title="Vertical line — mark a time/event">| V-Line</button>
+        <button class="dtool" id="dttrendline" onclick="setDraw('trendline')" title="Trendline — connect two price points">╱ Trend</button>
+        <button class="dtool" id="dtfib" onclick="setDraw('fib')" title="Fibonacci retracement — drag low to high">🌀 Fib</button>
+        <button class="dtool" id="dtrect" onclick="setDraw('rect')" title="Rectangle — box a price/time zone">▭ Box</button>
+        <button class="dtool" id="dtmeasure" onclick="setDraw('measure')" title="Measure tool — see ticks/points/$ between two prices">⟺ Measure</button>
+        <div class="dsep"></div>
+        <button class="dtool" id="dteraser" onclick="setDraw('eraser')" title="Click any drawing to erase it">⌫ Erase</button>
+        <button class="dtool danger" onclick="clearDrawings()" title="Clear all drawings">🗑 Clear</button>
+        <span class="draw-hint" id="drawHint">Select a tool to start drawing on the chart</span>
+      </div>
+
+      <div class="chart-wrap" id="mainWrap" style="position:relative;">
+        <canvas id="chart"></canvas>
+        <canvas id="drawCanvas"></canvas>
+      </div>
+
+      <div class="controls">
+        <div class="size-selector">
+          <span class="size-lbl">CONTRACTS</span>
+          <button class="size-btn active" onclick="setSize(1,this)">1</button>
+          <button class="size-btn" onclick="setSize(2,this)">2</button>
+          <button class="size-btn" onclick="setSize(5,this)">5</button>
+          <button class="size-btn" onclick="setSize(10,this)">10</button>
+        </div>
+        <div class="csep"></div>
+        <div class="stop-row">
+          <span class="stop-lbl">STOP</span>
+          <input class="stop-inp" id="stopInp" type="number" value="4" min="1" max="50">
+          <span class="stop-lbl">ticks</span>
+          <span class="stop-lbl" style="margin-left:4px;">TARGET</span>
+          <input class="stop-inp" id="targetInp" type="number" value="6" min="1" max="100">
+          <span class="stop-lbl">ticks</span>
+        </div>
+        <div class="csep"></div>
+        <button class="buy-btn" onclick="enterLong()" id="buyBtn">▲ BUY</button>
+        <button class="sell-btn" onclick="enterShort()" id="sellBtn">▼ SELL</button>
+        <button class="flat-btn" onclick="flatPosition()" id="flatBtn">■ FLAT</button>
+        <div class="csep"></div>
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <div style="display:flex;gap:4px;">
+            <button class="partial-btn" onclick="partialClose()" id="partialBtn" title="Close 50% of position at current price">½ PARTIAL</button>
+            <button class="trail-btn" id="trailBtn" onclick="toggleTrail()" title="Trailing stop — moves with price to lock in profit">TRAIL</button>
+          </div>
+          <div class="extra-controls">
+            <button class="xbtn" id="xVWAP" onclick="toggleOverlay('vwap')" title="VWAP — most important intraday level">VWAP</button>
+            <button class="xbtn" id="xPDHL" onclick="toggleOverlay('pdhl')" title="Previous Day High/Low — key levels">PDH/L</button>
+            <button class="xbtn" id="xSR" onclick="toggleOverlay('sr')" title="Auto Support/Resistance">S/R</button>
+            <button class="xbtn" onclick="document.getElementById('kbOv').classList.add('show');buildKbPanel()" title="Customize keybinds">⌨ KEYS</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT STATS -->
+    <div class="right-panel">
+      <div class="rp-section">
+        <div class="rp-title">Session P&L</div>
+        <div class="session-pnl flat" id="sessionPnl">$0.00</div>
+        <div style="font-size:9px;color:var(--text2);margin-top:2px;" id="sessionTicks">0 ticks total</div>
+      </div>
+      <div class="rp-section">
+        <div class="rp-title">Stats</div>
+        <div class="stats-mini">
+          <div class="smc"><div class="smc-l">Trades</div><div class="smc-v" id="statTrades">0</div></div>
+          <div class="smc"><div class="smc-l">Win Rate</div><div class="smc-v" id="statWR">—</div></div>
+          <div class="smc"><div class="smc-l">Best</div><div class="smc-v up" id="statBest" style="color:var(--green);">—</div></div>
+          <div class="smc"><div class="smc-l">Worst</div><div class="smc-v" id="statWorst" style="color:var(--red);">—</div></div>
+          <div class="smc"><div class="smc-l">Avg Win</div><div class="smc-v" id="statAvgW" style="color:var(--green);">—</div></div>
+          <div class="smc"><div class="smc-l">Avg Loss</div><div class="smc-v" id="statAvgL" style="color:var(--red);">—</div></div>
+        </div>
+      </div>
+      <div class="streak-row" style="padding:0 10px 8px;">
+        <div class="streak-card"><div class="sl">STREAK</div><div class="sv" id="curStreak">0</div></div>
+        <div class="streak-card"><div class="sl">BEST</div><div class="sv up" id="bestStreakEl">0W</div></div>
+        <div class="streak-card"><div class="sl">P.FACTOR</div><div class="sv" id="profitFactor">—</div></div>
+        <div class="streak-card"><div class="sl">AVG HOLD</div><div class="sv" id="avgHold">—</div></div>
+      </div>
+      <div class="equity-wrap">
+        <div class="equity-lbl">Equity Curve</div>
+        <canvas id="equityCanvas"></canvas>
+      </div>
+      <div class="rp-section" style="padding:6px 10px;flex-shrink:0;">
+        <div class="rp-title">Trade Log</div>
+      </div>
+      <div class="trade-log" id="tradeLog">
+        <div style="padding:14px 10px;font-size:9px;color:var(--text3);text-align:center;">No trades yet.<br>Hit BUY or SELL to start.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- KEYBIND OVERLAY -->
+<div class="keybind-ov" id="kbOv">
+  <div class="kb-wrap">
+    <div class="kb-title">⌨ Custom Keybinds</div>
+    <div style="font-size:10px;color:#4a5060;margin-bottom:14px;">Click any key button then press your desired key to remap it.</div>
+    <div class="kb-grid" id="kbGrid"></div>
+    <button class="kb-close" onclick="document.getElementById('kbOv').classList.remove('show')">SAVE & CLOSE</button>
+  </div>
+</div>
+
+<!-- NEWS FLASH -->
+<div class="news-flash" id="newsFlash">
+  <div class="nf-warning">⚠ NEWS EVENT IN <span id="nfCountdown">3</span>s ⚠</div>
+  <div class="nf-title" id="nfTitle">CPI DATA RELEASE</div>
+  <div style="font-size:10px;color:#7986a3;margin-top:4px;" id="nfDesc">Consumer Price Index — market-moving data incoming</div>
+  <div class="nf-impact" id="nfImpact"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+// ── NULL-SAFE DOM HELPERS ──
+function _g(id){return document.getElementById(id);}
+function _t(id,v){var e=_g(id);if(e)e.textContent=v;}
+function _h(id,v){var e=_g(id);if(e)e.innerHTML=v;}
+
+
+// ══════════════════════════════════════════════════════════════
+// INSTRUMENTS
+// ══════════════════════════════════════════════════════════════
+const INSTRUMENTS = {
+  ES:     { name:'ES',      full:'E-mini S&P 500',       sub:'E-mini S&P 500 · $12.50/tick',    tickSize:0.25,    tickVal:12.50, base:5284.25,  vol:0.0003,   color:'#00c8ff' },
+  NQ:     { name:'NQ',      full:'E-mini Nasdaq-100',     sub:'E-mini Nasdaq-100 · $5.00/tick',  tickSize:0.25,    tickVal:5.00,  base:18428.50, vol:0.0005,   color:'#d500f9' },
+  MES:    { name:'MES',     full:'Micro E-mini S&P 500',  sub:'Micro S&P · $1.25/tick',          tickSize:0.25,    tickVal:1.25,  base:5284.25,  vol:0.0003,   color:'#00b4d8' },
+  MNQ:    { name:'MNQ',     full:'Micro E-mini Nasdaq',   sub:'Micro Nasdaq · $0.50/tick',       tickSize:0.25,    tickVal:0.50,  base:18428.50, vol:0.0005,   color:'#c77dff' },
+  YM:     { name:'YM',      full:'Dow Jones Futures',     sub:'E-mini Dow · $5.00/tick',         tickSize:1,       tickVal:5.00,  base:39284.00, vol:0.0003,   color:'#4cc9f0' },
+  RTY:    { name:'RTY',     full:'Russell 2000 Futures',  sub:'E-mini Russell · $5.00/tick',     tickSize:0.10,    tickVal:5.00,  base:2084.30,  vol:0.0006,   color:'#f72585' },
+  CL:     { name:'CL',      full:'Crude Oil Futures',     sub:'WTI Crude Oil · $10.00/tick',     tickSize:0.01,    tickVal:10.00, base:84.35,    vol:0.0006,   color:'#ff6d00' },
+  GC:     { name:'GC',      full:'Gold Futures',          sub:'COMEX Gold · $10.00/tick',        tickSize:0.10,    tickVal:10.00, base:2342.40,  vol:0.0004,   color:'#ffd600' },
+  BTC:    { name:'BTC',     full:'Bitcoin Futures',       sub:'CME Bitcoin · $5.00/tick',        tickSize:5.00,    tickVal:5.00,  base:67450,    vol:0.0012,   color:'#ff9800' },
+  EURUSD: { name:'EUR/USD', full:'Euro / US Dollar',      sub:'Forex · $10/pip per lot',         tickSize:0.00010, tickVal:10.00, base:1.08420,  vol:0.00015,  color:'#00e676' },
+};
+
+// ══════════════════════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════════════════════
+let curInstr = 'ES';
+let balance = 25000;
+let position = null;
+let posTimer = 0;
+let posTimerInterval = null;
+let tradeHistory = [];
+let sessionPnl = 0;
+let sessionTicks = 0;
+let contractSize = 1;
+let candles = [];
+let currentPrice = 0;
+let prevPrice = 0;
+let dayHigh = 0, dayLow = Infinity;
+let vwapSum = 0, vwapVolSum = 0;
+let totalVol = 0;
+let chart = null;
+let tickInterval = null;
+let wins = 0, losses = 0;
+let winPnls = [], lossPnls = [];
+let consecutiveWins = 0, consecutiveLosses = 0, bestStreak = 0, worstStreak = 0;
+let equityCurve = [25000];
+let partialClosed = false;
+// Keybinds - default map
+let KEYBINDS = JSON.parse(localStorage.getItem('scalp_keybinds') || JSON.stringify({
+  buy:'ArrowUp', sell:'ArrowDown', flat:'Space',
+  size1:'1', size2:'2', size3:'3', size4:'4', size5:'5',
+  partialClose:'KeyP', trailStop:'KeyT',
+}));
+// Indicators toggles
+let showVWAP = false, showPDHL = false, showSR = false;
+// Drawing state
+let drawTool = 'none';
+let drawings2 = [];
+let drawIP = null;
+let newsActive = false;
+let sessionVolatility = 1.0; // multiplier based on session time
+let trailingStop = false;
+let trailingOffset = 0;
+
+// ══════════════════════════════════════════════════════════════
+// HELPERS
+// ══════════════════════════════════════════════════════════════
+function rn(a,b){ return Math.random()*(b-a)+a; }
+function rng(){ let u=0,v=0; while(u===0)u=Math.random(); while(v===0)v=Math.random(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); }
+function fmt(n,dp){ if(n===null||isNaN(n))return '—'; const d=dp!==undefined?dp:2; return n.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d}); }
+function fmtP(n){ return (n>=0?'+$':'-$')+fmt(Math.abs(n)); }
+function fmtTicks(n){ return (n>=0?'+':'')+n+' ticks'; }
+function snap(price){ const instr=INSTRUMENTS[curInstr]; return Math.round(price/instr.tickSize)*instr.tickSize; }
+
+// ══════════════════════════════════════════════════════════════
+// INIT + INSTRUMENT SWITCH
+// ══════════════════════════════════════════════════════════════
+function initInstrument(){
+  const instr = INSTRUMENTS[curInstr];
+  currentPrice = instr.base * (0.998 + Math.random()*0.004);
+  currentPrice = snap(currentPrice);
+  prevPrice = currentPrice;
+  dayHigh = currentPrice; dayLow = currentPrice;
+  vwapSum = 0; vwapVolSum = 0; totalVol = 0;
+  candles = generateCandles(currentPrice, instr.vol, 120);
+  currentPrice = candles[candles.length-1].c;
+  dayHigh = Math.max(...candles.map(c=>c.h));
+  dayLow = Math.min(...candles.map(c=>c.l));
+  buildChart();
+  updatePriceDisplay();
+  renderDOM();
+}
+
+function setInstrument(sym, btn){
+  if(position) { toast('Close position before switching instruments','err'); return; }
+  curInstr = sym;
+  document.querySelectorAll('.itab').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  const instr = INSTRUMENTS[sym];
+  document.getElementById('instrName').textContent = instr.name;
+  document.getElementById('instrSub').textContent = instr.sub;
+  if(tickInterval){ clearInterval(tickInterval); }
+  initInstrument();
+  tickInterval = setInterval(tick, 200);
+}
+
+// ══════════════════════════════════════════════════════════════
+// CANDLE GENERATION
+// ══════════════════════════════════════════════════════════════
+function generateCandles(base, vol, count){
+  let result = [];
+  let p = base * (0.992 + Math.random()*0.016);
+  let trend = rn(-0.0001, 0.0001);
+  for(let i=0;i<count;i++){
+    if(i%20===0) trend = rn(-0.0002, 0.0002);
+    const change = p * (vol * rng() * 0.7 + trend);
+    const o = snap(p);
+    const c = snap(Math.max(o+change, base*0.5));
+    const range = Math.abs(change)*(1+Math.random());
+    const h = snap(Math.max(o,c)+range*0.4*Math.random());
+    const l = snap(Math.min(o,c)-range*0.4*Math.random());
+    const v = Math.floor(rn(1000,8000));
+    result.push({o,h,l,c,v,t:i});
+    p = c;
+  }
+  return result;
+}
+
+// ══════════════════════════════════════════════════════════════
+// PRICE TICK
+// ══════════════════════════════════════════════════════════════
+let tickCount = 0;
+let candleTickCount = 0;
+const TICKS_PER_CANDLE = 15;
+
+function tick(){
+  const instr = INSTRUMENTS[curInstr];
+  prevPrice = currentPrice;
+  const change = currentPrice * instr.vol * rng() * (1 + Math.abs(rng())*0.3);
+  currentPrice = snap(Math.max(currentPrice + change, instr.base * 0.5));
+
+  // Update day stats
+  if(currentPrice > dayHigh) dayHigh = currentPrice;
+  if(currentPrice < dayLow) dayLow = currentPrice;
+  const vol = Math.floor(rn(100,800));
+  totalVol += vol;
+  vwapSum += currentPrice * vol;
+  vwapVolSum += vol;
+
+  // Update/append candle
+  candleTickCount++;
+  if(candleTickCount >= TICKS_PER_CANDLE){
+    candleTickCount = 0;
+    const last = candles[candles.length-1];
+    candles.push({o:last.c, h:currentPrice, l:currentPrice, c:currentPrice, v:vol, t:candles.length});
+    if(candles.length > 200) candles.shift();
+  } else {
+    const last = candles[candles.length-1];
+    last.c = currentPrice;
+    last.h = Math.max(last.h, currentPrice);
+    last.l = Math.min(last.l, currentPrice);
+    last.v += vol;
+  }
+
+  updatePriceDisplay();
+  updateLivePnl();
+  checkStopTarget();
+  renderDOM();
+  updateChart();
+  tickCount++;
+}
+
+// ══════════════════════════════════════════════════════════════
+// PRICE DISPLAY
+// ══════════════════════════════════════════════════════════════
+function updatePriceDisplay(){
+  const instr = INSTRUMENTS[curInstr];
+  const el = document.getElementById('bigPrice');
+  const chg = currentPrice - candles[0].o;
+  const ticks = Math.round(chg / instr.tickSize);
+  const isUp = currentPrice > prevPrice;
+  const isDown = currentPrice < prevPrice;
+
+  el.textContent = curInstr === 'EURUSD' ? currentPrice.toFixed(5) : fmt(currentPrice);
+  el.className = 'big-price ' + (isUp?'up':isDown?'down':'flat');
+
+  const pcEl = document.getElementById('priceChange');
+  pcEl.textContent = (chg>=0?'+':'')+fmt(chg, curInstr==='EURUSD'?5:2);
+  pcEl.style.color = chg>=0?'var(--green)':'var(--red)';
+  _t('tickChange', fmtTicks(ticks));
+
+  _t('dayHigh', curInstr==='EURUSD'?dayHigh.toFixed(5):fmt(dayHigh));
+  _t('dayLow', curInstr==='EURUSD'?dayLow.toFixed(5):fmt(dayLow));
+  const vwap = vwapVolSum>0 ? vwapSum/vwapVolSum : currentPrice;
+  _t('vwapLabel', curInstr==='EURUSD'?snap(vwap).toFixed(5):fmt(snap(vwap)));
+  _t('volLabel', totalVol>1000?(totalVol/1000).toFixed(1)+'K':totalVol);
+
+  // Flash DOM row for current price
+  const el2 = document.querySelector('.dom-row.current-price');
+  if(el2){ el2.classList.add(isUp?'tick-up':'tick-down'); setTimeout(()=>{ if(el2) el2.classList.remove('tick-up','tick-down');},200); }
+}
+
+// ══════════════════════════════════════════════════════════════
+// DOM LADDER
+// ══════════════════════════════════════════════════════════════
+function renderDOM(){
+  const instr = INSTRUMENTS[curInstr];
+  const levels = 22;
+  let rows = '';
+  const maxVol = 3000;
+
+  for(let i=levels;i>=-levels;i--){
+    const price = snap(currentPrice + i*instr.tickSize);
+    const priceStr = curInstr==='EURUSD' ? price.toFixed(5) : fmt(price);
+    const isCur = i===0;
+    const isAsk = i>0;
+    const isBid = i<0;
+
+    let askVol='', bidVol='', askBarW=0, bidBarW=0;
+    if(isAsk){
+      const v = Math.floor(rn(50,2200)*(1+(Math.random()>0.95?8:0)));
+      askVol = v;
+      askBarW = Math.min(v/maxVol*100,100);
+    } else if(isBid){
+      const v = Math.floor(rn(50,2200)*(1+(Math.random()>0.95?8:0)));
+      bidVol = v;
+      bidBarW = Math.min(v/maxVol*100,100);
+    }
+
+    rows += `<div class="dom-row${isCur?' current-price':''}" onclick="domClick(${price})">
+      ${isAsk?`<div class="dom-bar-ask" style="width:${askBarW}%"></div>`:''}
+      ${isBid?`<div class="dom-bar-bid" style="width:${bidBarW}%"></div>`:''}
+      <span class="dom-ask-vol">${askVol}</span>
+      <span class="dom-price" style="color:${isCur?'var(--accent)':isAsk?'var(--red)':'var(--green)'};${isCur?'font-weight:700;':''}">${priceStr}</span>
+      <span class="dom-bid-vol">${bidVol}</span>
+    </div>`;
+  }
+  document.getElementById('domList').innerHTML = rows;
+  document.getElementById('domSpread').textContent = `Spread: 1 tick ($${instr.tickVal.toFixed(2)})`;
+}
+
+function domClick(price){
+  if(!position) return;
+  // Click DOM price to set limit exit
+  toast(`Limit exit set @ ${price} — click FLAT to exit at market`,'info');
+}
+
+// ══════════════════════════════════════════════════════════════
+// CHART
+// ══════════════════════════════════════════════════════════════
+function buildChart(){
+  if(chart){ try{chart.destroy();}catch(e){} chart=null; }
+  const ctx = document.getElementById('chart').getContext('2d');
+  const slice = candles.slice(-80);
+  const labels = slice.map((_,i)=>i);
+  const upD = slice.map(c=>c.c>=c.o?[c.o,c.c]:null);
+  const dnD = slice.map(c=>c.c<c.o?[c.c,c.o]:null);
+  const wkD = slice.map(c=>[c.l,c.h]);
+  const instr = INSTRUMENTS[curInstr];
+
+  const allP = [...slice.map(c=>c.h),...slice.map(c=>c.l)];
+  const minP = Math.min(...allP)*0.9995, maxP = Math.max(...allP)*1.0005;
+
+  chart = new Chart(ctx,{
+    type:'bar',
+    data:{labels, datasets:[
+      {type:'bar',label:'Wick',data:wkD,backgroundColor:slice.map(c=>c.c>=c.o?'rgba(0,230,118,0.4)':'rgba(255,23,68,0.4)'),borderWidth:0,borderSkipped:false,barThickness:1,categoryPercentage:1,barPercentage:1,order:2,yAxisID:'y'},
+      {type:'bar',label:'Up',data:upD,backgroundColor:'rgba(0,230,118,0.85)',borderWidth:0,borderSkipped:false,categoryPercentage:0.6,barPercentage:0.8,order:1,yAxisID:'y',maxBarThickness:10},
+      {type:'bar',label:'Down',data:dnD,backgroundColor:'rgba(255,23,68,0.85)',borderWidth:0,borderSkipped:false,categoryPercentage:0.6,barPercentage:0.8,order:1,yAxisID:'y',maxBarThickness:10},
+    ]},
+    options:{
+      animation:false, responsive:true, maintainAspectRatio:false,
+      layout:{padding:{top:10,right:50,bottom:2,left:4}},
+      plugins:{legend:{display:false},tooltip:{
+        backgroundColor:'rgba(6,8,16,0.95)',borderColor:'rgba(0,200,255,0.2)',borderWidth:1,
+        titleColor:'#7986a3',bodyColor:'#e8f0fe',padding:8,
+        callbacks:{title:ctx=>''  ,label:ctx=>{
+          if(ctx.dataset.label==='Wick')return null;
+          const c=slice[ctx.dataIndex]; if(!c)return null;
+          return [`O: ${fmt(c.o)}`,`H: ${fmt(c.h)}`,`L: ${fmt(c.l)}`,`C: ${fmt(c.c)}`];
+        }}
+      }},
+      scales:{
+        x:{display:false},
+        y:{display:true,position:'right',min:minP,max:maxP,
+          grid:{color:'rgba(255,255,255,0.03)'},
+          ticks:{color:'#2e3a52',font:{size:8,family:'JetBrains Mono'},callback:v=>fmt(v)},
+          border:{display:false}}
+      }
+    }
+  });
+}
+
+function updateChart(){
+  if(!chart) return;
+  const slice = candles.slice(-80);
+  const allP = [...slice.map(c=>c.h),...slice.map(c=>c.l)];
+  const minP = Math.min(...allP)*0.9995, maxP = Math.max(...allP)*1.0005;
+  chart.data.labels = slice.map((_,i)=>i);
+  chart.data.datasets[0].data = slice.map(c=>[c.l,c.h]);
+  chart.data.datasets[0].backgroundColor = slice.map(c=>c.c>=c.o?'rgba(0,230,118,0.4)':'rgba(255,23,68,0.4)');
+  chart.data.datasets[1].data = slice.map(c=>c.c>=c.o?[c.o,c.c]:null);
+  chart.data.datasets[2].data = slice.map(c=>c.c<c.o?[c.c,c.o]:null);
+  chart.options.scales.y.min = minP;
+  chart.options.scales.y.max = maxP;
+  chart.update('none');
+}
+
+// ══════════════════════════════════════════════════════════════
+// TRADING
+// ══════════════════════════════════════════════════════════════
+function enterLong(){
+  if(position){ toast('Already in a position — FLAT first','err'); return; }
+  const instr = INSTRUMENTS[curInstr];
+  const stop = parseInt(document.getElementById('stopInp').value)||4;
+  const target = parseInt(document.getElementById('targetInp').value)||6;
+  const fillPrice = snap(currentPrice + instr.tickSize); // buy the ask
+  position = {
+    side:'long', entry:fillPrice, size:contractSize,
+    entryTime:Date.now(),
+    stopPrice: snap(fillPrice - stop*instr.tickSize),
+    targetPrice: snap(fillPrice + target*instr.tickSize),
+  };
+  startPosTimer();
+  document.getElementById('posBar').classList.add('show');
+  document.getElementById('posIndicator').textContent = '▲ LONG × '+contractSize;
+  document.getElementById('posIndicator').className = 'pos-indicator long';
+  document.getElementById('posDetail').textContent = `Entry: ${fmt(fillPrice)} | Stop: ${fmt(position.stopPrice)} | Target: ${fmt(position.targetPrice)}`;
+  toast(`▲ Long ${contractSize} ${curInstr} @ ${fmt(fillPrice)}`,'ok');
+  updateLivePnl();
+}
+
+function enterShort(){
+  if(position){ toast('Already in a position — FLAT first','err'); return; }
+  const instr = INSTRUMENTS[curInstr];
+  const stop = parseInt(document.getElementById('stopInp').value)||4;
+  const target = parseInt(document.getElementById('targetInp').value)||6;
+  const fillPrice = snap(currentPrice - instr.tickSize); // sell the bid
+  position = {
+    side:'short', entry:fillPrice, size:contractSize,
+    entryTime:Date.now(),
+    stopPrice: snap(fillPrice + stop*instr.tickSize),
+    targetPrice: snap(fillPrice - target*instr.tickSize),
+  };
+  startPosTimer();
+  document.getElementById('posBar').classList.add('show');
+  document.getElementById('posIndicator').textContent = '▼ SHORT × '+contractSize;
+  document.getElementById('posIndicator').className = 'pos-indicator short';
+  document.getElementById('posDetail').textContent = `Entry: ${fmt(fillPrice)} | Stop: ${fmt(position.stopPrice)} | Target: ${fmt(position.targetPrice)}`;
+  toast(`▼ Short ${contractSize} ${curInstr} @ ${fmt(fillPrice)}`,'ok');
+  updateLivePnl();
+}
+
+function flatPosition(reason){
+  if(!position){ toast('No open position','err'); return; }
+  const instr = INSTRUMENTS[curInstr];
+  const exitPrice = reason==='stop' ? position.stopPrice : reason==='target' ? position.targetPrice : currentPrice;
+  const ticksMoved = position.side==='long'
+    ? Math.round((exitPrice - position.entry)/instr.tickSize)
+    : Math.round((position.entry - exitPrice)/instr.tickSize);
+  const pnl = ticksMoved * instr.tickVal * position.size;
+  const holdTime = Math.round((Date.now()-position.entryTime)/1000);
+
+  // Record trade
+  const trade = {
+    time: new Date().toLocaleTimeString('en-US',{hour12:false}),
+    instr: curInstr, side: position.side, size: position.size,
+    entry: position.entry, exit: exitPrice, ticks: ticksMoved, pnl, holdTime,
+    reason: reason||'manual'
+  };
+  tradeHistory.unshift(trade);
+  sessionPnl += pnl;
+  sessionTicks += ticksMoved;
+  balance += pnl;
+  if(pnl>0){ wins++; winPnls.push(pnl); }
+  else { losses++; lossPnls.push(pnl); }
+
+  // Update UI
+  stopPosTimer();
+  position = null;
+  document.getElementById('posBar').classList.remove('show');
+  document.getElementById('livePnl').textContent = '$0.00';
+  document.getElementById('livePnl').className = 'lp-value flat';
+  document.getElementById('liveTicks').textContent = '0 ticks';
+  updateSessionStats();
+  renderTradeLog();
+
+  const isWin = pnl>0;
+  const msg = `${isWin?'✓':'✗'} ${position?.side||trade.side.toUpperCase()} closed: ${fmtP(pnl)} (${fmtTicks(ticksMoved)}) in ${holdTime}s`;
+  toast(isWin?`✓ +${fmt(pnl)} — ${ticksMoved} ticks in ${holdTime}s`:`✗ ${fmt(pnl)} — stop hit`, isWin?'ok':'err');
+
+  document.getElementById('balLabel').textContent = '$'+fmt(balance);
+}
+
+function checkStopTarget(){
+  if(!position) return;
+  const instr = INSTRUMENTS[curInstr];
+  if(position.side==='long'){
+    if(currentPrice <= position.stopPrice) flatPosition('stop');
+    else if(currentPrice >= position.targetPrice) flatPosition('target');
+  } else {
+    if(currentPrice >= position.stopPrice) flatPosition('stop');
+    else if(currentPrice <= position.targetPrice) flatPosition('target');
+  }
+}
+
+function updateLivePnl(){
+  if(!position) return;
+  const instr = INSTRUMENTS[curInstr];
+  const ticks = position.side==='long'
+    ? Math.round((currentPrice-position.entry)/instr.tickSize)
+    : Math.round((position.entry-currentPrice)/instr.tickSize);
+  const pnl = ticks * instr.tickVal * position.size;
+  const el = document.getElementById('livePnl');
+  el.textContent = (pnl>=0?'+$':'-$')+fmt(Math.abs(pnl));
+  el.className = 'lp-value '+(pnl>0?'up':pnl<0?'down':'flat');
+  _t('liveTicks', fmtTicks(ticks));
+}
+
+function setSize(n, btn){
+  contractSize = n;
+  document.querySelectorAll('.size-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+// ══════════════════════════════════════════════════════════════
+// POS TIMER
+// ══════════════════════════════════════════════════════════════
+function startPosTimer(){
+  posTimer = 0;
+  if(posTimerInterval) clearInterval(posTimerInterval);
+  posTimerInterval = setInterval(()=>{
+    posTimer++;
+    const m=Math.floor(posTimer/60), s=posTimer%60;
+    _t('posTimer', m+':'+(s<10?'0':'')+s);
+  },1000);
+}
+function stopPosTimer(){
+  if(posTimerInterval) clearInterval(posTimerInterval);
+  posTimerInterval = null;
+  posTimer = 0;
+  _t('posTimer', '0:00');
+}
+
+// ══════════════════════════════════════════════════════════════
+// STATS + LOG
+// ══════════════════════════════════════════════════════════════
+function updateSessionStats(){
+  const pnlEl = document.getElementById('sessionPnl');
+  pnlEl.textContent = (sessionPnl>=0?'+$':'-$')+fmt(Math.abs(sessionPnl));
+  pnlEl.className = 'session-pnl '+(sessionPnl>0?'up':sessionPnl<0?'down':'flat');
+  pnlEl.style.color = sessionPnl>0?'var(--green)':sessionPnl<0?'var(--red)':'var(--text2)';
+
+  const dailyEl = document.getElementById('dailyPnlLabel');
+  dailyEl.textContent = 'Day: '+(sessionPnl>=0?'+$':'-$')+fmt(Math.abs(sessionPnl));
+  dailyEl.style.color = sessionPnl>=0?'var(--green)':'var(--red)';
+
+  _t('sessionTicks', fmtTicks(sessionTicks)+' total');
+  const total = wins+losses;
+  _t('statTrades', total);
+  _t('statWR', total>0?(wins/total*100).toFixed(0)+'%':'—');
+  const allPnls = [...winPnls,...lossPnls];
+  _t('statBest', winPnls.length?fmtP(Math.max(...winPnls)):'—');
+  _t('statWorst', lossPnls.length?fmtP(Math.min(...lossPnls)):'—');
+  _t('statAvgW', winPnls.length?fmtP(winPnls.reduce((a,b)=>a+b,0)/winPnls.length):'—');
+  _t('statAvgL', lossPnls.length?fmtP(lossPnls.reduce((a,b)=>a+b,0)/lossPnls.length):'—');
+}
+
+function renderTradeLog(){
+  if(!tradeHistory.length){
+    _h('tradeLog', '<div style="padding:14px 10px;font-size:9px;color:var(--text3);text-align:center;">No trades yet.<br>Hit BUY or SELL to start.</div>');
+    return;
+  }
+  var _tl=_g('tradeLog');
+  if(_tl){
+    if(!tradeHistory.length){
+      _tl.innerHTML='<div style="padding:14px 10px;font-size:9px;color:var(--text3);text-align:center;">No trades yet.<br>Hit BUY or SELL to start.</div>';
+    } else {
+      _tl.innerHTML=tradeHistory.slice(0,30).map(function(t){
+        var isWin=t.pnl>=0;
+        var icon=t.side==='long'?'▲':'▼';
+        var col=isWin?'var(--green)':'var(--red)';
+        var rb=t.reason==='stop'?'<span style="font-size:7px;color:var(--red);background:rgba(255,23,68,0.1);padding:1px 4px;border-radius:2px;">STOP</span>'
+          :t.reason==='target'?'<span style="font-size:7px;color:var(--green);background:rgba(0,230,118,0.1);padding:1px 4px;border-radius:2px;">TGT</span>'
+          :'<span style="font-size:7px;color:var(--yellow);background:rgba(255,214,0,0.1);padding:1px 4px;border-radius:2px;">MAN</span>';
+        return '<div class="tlog-row"><div><div class="tlog-sym">'+icon+' '+t.instr+' ×'+t.size+' '+rb+'</div>'
+          +'<div class="tlog-detail">'+t.time+' · in:'+fmt(t.entry)+' out:'+fmt(t.exit)+' · '+t.holdTime+'s</div></div>'
+          +'<div><div class="tlog-pnl" style="color:'+col+';">'+(isWin?'+$':'-$')+fmt(Math.abs(t.pnl))+'</div>'
+          +'<div class="tlog-ticks" style="color:'+col+';">'+fmtTicks(t.ticks)+'</div></div></div>';
+      }).join('');
+    }
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+// TUTORIAL
+// ══════════════════════════════════════════════════════════════
+function showTutSection(idx, btn){
+  document.querySelectorAll('.tut-section').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.tnav-btn').forEach(b=>b.classList.remove('active'));
+  const sec = document.getElementById('ts'+idx);
+  if(sec) sec.classList.add('active');
+  if(btn) btn.classList.add('active');
+}
+function closeTutorial(){
+  document.getElementById('tutOv').classList.remove('show');
+}
+
+// ══════════════════════════════════════════════════════════════
+// ONBOARDING
+// ══════════════════════════════════════════════════════════════
+function startSim(showTutorial){
+  document.getElementById('obOv').style.display='none';
+  const app = document.getElementById('appMain');
+  app.style.display='flex';
+  if(showTutorial){
+    document.getElementById('tutOv').classList.add('show');
+  }
+  initInstrument();
+  tickInterval = setInterval(tick, 200);
+  setInterval(tickClock, 1000);
+  tickClock();
+  scheduleNews();
+  updateSession();
+  setTimeout(initDrawCanvas, 300);
+  setInterval(drawEquityCurve, 3000);
+}
+
+function tickClock(){
+  document.getElementById('clock').textContent = new Date().toLocaleTimeString('en-US',{hour12:false})+' EST';
+  // Session label
+  const h = new Date().getHours(), m = new Date().getMinutes();
+  const mins = h*60+m;
+  let session = 'GLOBEX';
+  if(mins>=570&&mins<960) session='RTH';
+  else if(mins>=540&&mins<570) session='PRE-MKT';
+  else if(mins>=960&&mins<1020) session='AFTER-HRS';
+  var _sl=document.getElementById('sessionLabel'); if(_sl) _sl.textContent=session;
+}
+
+function resetSession(){
+  if(position) flatPosition('manual');
+  sessionPnl=0; sessionTicks=0; wins=0; losses=0;
+  winPnls=[]; lossPnls=[]; tradeHistory=[];
+  balance=25000;
+  document.getElementById('balLabel').textContent='$25,000';
+  document.getElementById('dailyPnlLabel').textContent='Day: $0.00';
+  document.getElementById('dailyPnlLabel').style.color='var(--text2)';
+  updateSessionStats();
+  renderTradeLog();
+  toast('Session reset','ok');
+}
+
+// ══════════════════════════════════════════════════════════════
+// TOAST
+// ══════════════════════════════════════════════════════════════
+function toast(msg, type='ok'){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.className='toast show '+(type||'');
+  clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),3000);
+}
+
+// ══════════════════════════════════════════════════════════════
+// KEYBOARD SHORTCUTS
+// ══════════════════════════════════════════════════════════════
+
+// ══════════════════════════════════════════════════════════════
+// SOUND ENGINE
+// ══════════════════════════════════════════════════════════════
+let _ac2 = null;
+function getAC2(){ if(!_ac2) _ac2 = new (window.AudioContext||window.webkitAudioContext)(); return _ac2; }
+function playScalpSound(type){
+  try{
+    const ac = getAC2();
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.connect(g); g.connect(ac.destination);
+    if(type==='buy'){
+      o.type='sine'; o.frequency.setValueAtTime(660,ac.currentTime); o.frequency.exponentialRampToValueAtTime(880,ac.currentTime+0.08);
+      g.gain.setValueAtTime(0.25,ac.currentTime); g.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+0.15);
+      o.start(); o.stop(ac.currentTime+0.15);
+    } else if(type==='sell'){
+      o.type='sine'; o.frequency.setValueAtTime(440,ac.currentTime); o.frequency.exponentialRampToValueAtTime(330,ac.currentTime+0.08);
+      g.gain.setValueAtTime(0.25,ac.currentTime); g.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+0.15);
+      o.start(); o.stop(ac.currentTime+0.15);
+    } else if(type==='stop'){
+      o.type='sawtooth'; o.frequency.setValueAtTime(180,ac.currentTime);
+      g.gain.setValueAtTime(0.3,ac.currentTime); g.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+0.4);
+      o.start(); o.stop(ac.currentTime+0.4);
+    } else if(type==='target'){
+      [880,1100,1320].forEach((f,i)=>{
+        const o2=ac.createOscillator(),g2=ac.createGain();
+        o2.connect(g2); g2.connect(ac.destination);
+        o2.frequency.value=f; o2.type='sine';
+        g2.gain.setValueAtTime(0,ac.currentTime+i*0.08);
+        g2.gain.linearRampToValueAtTime(0.2,ac.currentTime+i*0.08+0.04);
+        g2.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+i*0.08+0.2);
+        o2.start(ac.currentTime+i*0.08); o2.stop(ac.currentTime+i*0.08+0.25);
+      });
+    } else if(type==='news'){
+      [440,440,440].forEach((_,i)=>{
+        const o2=ac.createOscillator(),g2=ac.createGain();
+        o2.connect(g2); g2.connect(ac.destination);
+        o2.frequency.value=880; o2.type='square';
+        g2.gain.setValueAtTime(0,ac.currentTime+i*0.25);
+        g2.gain.linearRampToValueAtTime(0.15,ac.currentTime+i*0.25+0.05);
+        g2.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+i*0.25+0.2);
+        o2.start(ac.currentTime+i*0.25); o2.stop(ac.currentTime+i*0.25+0.25);
+      });
+    } else if(type==='partial'){
+      o.type='sine'; o.frequency.value=1100;
+      g.gain.setValueAtTime(0.15,ac.currentTime); g.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+0.12);
+      o.start(); o.stop(ac.currentTime+0.12);
+    }
+  }catch(e){}
+}
+
+// ══════════════════════════════════════════════════════════════
+// KEYBINDS
+// ══════════════════════════════════════════════════════════════
+const KB_ACTIONS = {
+  buy:{label:'Buy (Long)',fn:()=>enterLong()},
+  sell:{label:'Sell (Short)',fn:()=>enterShort()},
+  flat:{label:'Flat (Close All)',fn:()=>flatPosition()},
+  size1:{label:'Size: 1 Contract',fn:()=>setSize(1,document.querySelector('.size-btn'))},
+  size2:{label:'Size: 2 Contracts',fn:()=>setSize(2,null)},
+  size3:{label:'Size: 5 Contracts',fn:()=>setSize(5,null)},
+  size4:{label:'Size: 10 Contracts',fn:()=>setSize(10,null)},
+  partialClose:{label:'Partial Close (50%)',fn:()=>partialClose()},
+  trailStop:{label:'Toggle Trail Stop',fn:()=>toggleTrail()},
+};
+
+let listeningFor = null;
+function buildKbPanel(){
+  const grid = document.getElementById('kbGrid');
+  grid.innerHTML = Object.keys(KB_ACTIONS).map(k=>{
+    const val = KEYBINDS[k] || '—';
+    const display = val==='Space'?' SPACE ':val==='ArrowUp'?'↑ UP':val==='ArrowDown'?'↓ DOWN':val==='ArrowLeft'?'← LEFT':val==='ArrowRight'?'→ RIGHT':val.replace('Key','').replace('Digit','');
+    return `<div class="kb-row"><span class="kb-action">${KB_ACTIONS[k].label}</span><button class="kb-key" id="kbb-${k}" onclick="startListening('${k}')">${display}</button></div>`;
+  }).join('');
+}
+function startListening(action){
+  if(listeningFor){
+    const prev = document.getElementById('kbb-'+listeningFor);
+    if(prev) prev.classList.remove('listening');
+  }
+  listeningFor = action;
+  const btn = document.getElementById('kbb-'+action);
+  if(btn){ btn.classList.add('listening'); btn.textContent='press a key...'; }
+}
+document.addEventListener('keydown', e=>{
+  if(listeningFor){
+    e.preventDefault();
+    KEYBINDS[listeningFor] = e.code;
+    localStorage.setItem('scalp_keybinds', JSON.stringify(KEYBINDS));
+    const btn = document.getElementById('kbb-'+listeningFor);
+    const display = e.code==='Space'?' SPACE ':e.code==='ArrowUp'?'↑ UP':e.code==='ArrowDown'?'↓ DOWN':e.code.replace('Key','').replace('Digit','');
+    if(btn){ btn.classList.remove('listening'); btn.textContent=display; }
+    listeningFor = null;
+    return;
+  }
+  if(e.target.tagName==='INPUT') return;
+  const code = e.code;
+  if(e.code==='Space') e.preventDefault();
+  Object.keys(KB_ACTIONS).forEach(k=>{ if(KEYBINDS[k]===code) KB_ACTIONS[k].fn(); });
+});
+
+// ══════════════════════════════════════════════════════════════
+// EQUITY CURVE
+// ══════════════════════════════════════════════════════════════
+function drawEquityCurve(){
+  const canvas = document.getElementById('equityCanvas');
+  if(!canvas) return;
+  const ctx = canvas.getContext('2d');
+  canvas.width = canvas.offsetWidth;
+  canvas.height = 50;
+  const data = equityCurve;
+  if(data.length < 2){ ctx.clearRect(0,0,canvas.width,canvas.height); return; }
+  const min = Math.min(...data)*0.999, max = Math.max(...data)*1.001;
+  const w = canvas.width, h = canvas.height;
+  const xStep = w/(data.length-1);
+  const isUp = data[data.length-1] >= data[0];
+  ctx.clearRect(0,0,w,h);
+  ctx.beginPath();
+  ctx.moveTo(0, h-(data[0]-min)/(max-min)*h);
+  data.forEach((v,i)=>{ ctx.lineTo(i*xStep, h-(v-min)/(max-min)*h); });
+  ctx.strokeStyle = isUp?'#00e676':'#ff1744';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  ctx.lineTo(w,h); ctx.lineTo(0,h);
+  ctx.fillStyle = isUp?'rgba(0,230,118,0.08)':'rgba(255,23,68,0.08)';
+  ctx.fill();
+}
+
+// ══════════════════════════════════════════════════════════════
+// PARTIAL CLOSE + TRAILING STOP
+// ══════════════════════════════════════════════════════════════
+function partialClose(){
+  if(!position){ toast('No position to partially close','err'); return; }
+  if(partialClosed){ toast('Already partially closed','err'); return; }
+  const instr = INSTRUMENTS[curInstr];
+  const halfSize = Math.floor(position.size/2);
+  if(halfSize < 1){ toast('Position too small to partial close','err'); return; }
+  const ticks = position.side==='long'
+    ? Math.round((currentPrice-position.entry)/instr.tickSize)
+    : Math.round((position.entry-currentPrice)/instr.tickSize);
+  const pnl = ticks * instr.tickVal * halfSize;
+  sessionPnl += pnl;
+  balance += pnl;
+  position.size -= halfSize;
+  partialClosed = true;
+  equityCurve.push(balance);
+  drawEquityCurve();
+  playScalpSound('partial');
+  toast(`½ Partial close: ${fmtP(pnl)} (${halfSize} contracts)`, pnl>=0?'ok':'err');
+  document.getElementById('balLabel').textContent = '$'+fmt(balance);
+}
+
+function toggleTrail(){
+  if(!position){ toast('Enter a position first','err'); return; }
+  trailingStop = !trailingStop;
+  if(trailingStop){
+    const instr = INSTRUMENTS[curInstr];
+    const stop = parseInt(document.getElementById('stopInp').value)||4;
+    trailingOffset = stop * instr.tickSize;
+    document.getElementById('trailBtn').classList.add('on');
+    toast('Trailing stop ON — '+stop+' ticks','info');
+  } else {
+    document.getElementById('trailBtn').classList.remove('on');
+    toast('Trailing stop OFF','info');
+  }
+}
+
+// Update trailing stop in tick
+function updateTrailingStop(){
+  if(!position||!trailingStop) return;
+  const instr = INSTRUMENTS[curInstr];
+  if(position.side==='long'){
+    const newStop = currentPrice - trailingOffset;
+    if(newStop > position.stopPrice) position.stopPrice = snap(newStop);
+  } else {
+    const newStop = currentPrice + trailingOffset;
+    if(newStop < position.stopPrice) position.stopPrice = snap(newStop);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+// CHART OVERLAYS: VWAP, PDH/L, S/R
+// ══════════════════════════════════════════════════════════════
+function toggleOverlay(type){
+  if(type==='vwap'){ showVWAP=!showVWAP; document.getElementById('xVWAP').classList.toggle('on-g',showVWAP); }
+  if(type==='pdhl'){ showPDHL=!showPDHL; document.getElementById('xPDHL').classList.toggle('on',showPDHL); }
+  if(type==='sr'){ showSR=!showSR; document.getElementById('xSR').classList.toggle('on-r',showSR); }
+  buildChart();
+}
+
+// ══════════════════════════════════════════════════════════════
+// SESSION VOLATILITY
+// ══════════════════════════════════════════════════════════════
+function updateSession(){
+  const h = new Date().getHours(), m = new Date().getMinutes();
+  const mins = h*60+m;
+  let session='GLOBEX', vol=0.5, badgeClass='sb-globex';
+  if(mins>=570&&mins<600){ session='OPEN'; vol=2.2; badgeClass='sb-rth'; }
+  else if(mins>=600&&mins<690){ session='RTH'; vol=1.4; badgeClass='sb-rth'; }
+  else if(mins>=690&&mins<780){ session='LUNCH'; vol=0.6; badgeClass='sb-lunch'; }
+  else if(mins>=780&&mins<870){ session='RTH'; vol=1.2; badgeClass='sb-rth'; }
+  else if(mins>=870&&mins<960){ session='CLOSE'; vol=1.8; badgeClass='sb-rth'; }
+  sessionVolatility = vol;
+  const badge = document.getElementById('sessionBadge');
+  if(badge){ badge.textContent=session; badge.className='session-badge '+badgeClass; }
+  const vlbl = document.getElementById('volatilityLabel');
+  if(vlbl) vlbl.textContent = 'VOL: '+(vol>1.5?'HIGH':vol>0.8?'NORMAL':'LOW');
+}
+
+// ══════════════════════════════════════════════════════════════
+// NEWS EVENTS
+// ══════════════════════════════════════════════════════════════
+const NEWS_EVENTS = [
+  {title:'CPI DATA RELEASE',desc:'Consumer Price Index — inflation reading',impact:()=>rn(-35,35)},
+  {title:'NON-FARM PAYROLLS',desc:'Monthly jobs report — market mover',impact:()=>rn(-40,40)},
+  {title:'FED RATE DECISION',desc:'FOMC rate announcement',impact:()=>rn(-50,50)},
+  {title:'GDP GROWTH DATA',desc:'Quarterly GDP reading',impact:()=>rn(-25,25)},
+  {title:'EARNINGS SURPRISE',desc:'Major company beats/misses estimates',impact:()=>rn(-30,30)},
+  {title:'CRUDE INVENTORY',desc:'Weekly oil supply data',impact:()=>rn(-20,20)},
+  {title:'FLASH PMI',desc:'Manufacturing activity index',impact:()=>rn(-15,15)},
+];
+let newsScheduled = false;
+function scheduleNews(){
+  setInterval(()=>{
+    if(Math.random() < 0.008 && !newsActive){
+      triggerNewsWarning();
+    }
+  }, 3000);
+}
+function triggerNewsWarning(){
+  newsActive = true;
+  const ev = NEWS_EVENTS[Math.floor(Math.random()*NEWS_EVENTS.length)];
+  const impact = Math.round(ev.impact());
+  const flash = document.getElementById('newsFlash');
+  document.getElementById('nfTitle').textContent = ev.title;
+  document.getElementById('nfDesc').textContent = ev.desc;
+  document.getElementById('nfImpact').textContent = '';
+  flash.classList.add('show');
+  playScalpSound('news');
+  let countdown = 3;
+  const cdEl = document.getElementById('nfCountdown');
+  const cdInt = setInterval(()=>{
+    countdown--;
+    if(cdEl) cdEl.textContent = countdown;
+    if(countdown <= 0){
+      clearInterval(cdInt);
+      applyNewsImpact(impact, ev.title, flash);
+    }
+  },1000);
+}
+function applyNewsImpact(ticks, title, flash){
+  const instr = INSTRUMENTS[curInstr];
+  const move = ticks * instr.tickSize;
+  for(let i=0;i<Math.abs(ticks);i++){
+    setTimeout(()=>{
+      currentPrice = snap(Math.max(currentPrice + (move>0?1:-1)*instr.tickSize*2, instr.base*0.3));
+      if(currentPrice>dayHigh) dayHigh=currentPrice;
+      if(currentPrice<dayLow) dayLow=currentPrice;
+      const last = candles[candles.length-1];
+      last.c = currentPrice;
+      last.h = Math.max(last.h, currentPrice);
+      last.l = Math.min(last.l, currentPrice);
+    }, i*40);
+  }
+  const impEl = document.getElementById('nfImpact');
+  if(impEl){
+    impEl.textContent = ticks>0 ? '▲ BULLISH +'+ticks+' ticks' : '▼ BEARISH '+ticks+' ticks';
+    impEl.style.color = ticks>0?'#00e676':'#ff1744';
+  }
+  setTimeout(()=>{ flash.classList.remove('show'); newsActive=false; },2500);
+}
+
+// ══════════════════════════════════════════════════════════════
+// SLIPPAGE + SPREAD WIDENING
+// ══════════════════════════════════════════════════════════════
+function getSlippage(){
+  const instr = INSTRUMENTS[curInstr];
+  if(newsActive) return instr.tickSize * (1+Math.floor(Math.random()*3));
+  if(sessionVolatility > 1.8 && Math.random() < 0.25) return instr.tickSize;
+  return 0;
+}
+
+// ══════════════════════════════════════════════════════════════
+// STREAK + STATS UPDATE
+// ══════════════════════════════════════════════════════════════
+function updateStreakStats(won){
+  if(won){ consecutiveWins++; consecutiveLosses=0; if(consecutiveWins>bestStreak)bestStreak=consecutiveWins; }
+  else { consecutiveLosses++; consecutiveWins=0; if(consecutiveLosses>worstStreak)worstStreak=consecutiveLosses; }
+  const cs = document.getElementById('curStreak');
+  if(cs){
+    const streak = consecutiveWins>0?consecutiveWins:consecutiveLosses>0?-consecutiveLosses:0;
+    cs.textContent = (streak>0?'+':'')+streak;
+    cs.style.color = streak>0?'#00e676':streak<0?'#ff1744':'#7986a3';
+  }
+  const bs = document.getElementById('bestStreakEl');
+  if(bs) bs.textContent = bestStreak+'W';
+  // profit factor
+  const totalWon = winPnls.reduce((a,b)=>a+b,0);
+  const totalLost = Math.abs(lossPnls.reduce((a,b)=>a+b,0));
+  const pf = document.getElementById('profitFactor');
+  if(pf) pf.textContent = totalLost>0?(totalWon/totalLost).toFixed(2):'—';
+  // avg hold
+  const ah = document.getElementById('avgHold');
+  if(ah && tradeHistory.length){
+    const avg = Math.round(tradeHistory.reduce((a,t)=>a+t.holdTime,0)/tradeHistory.length);
+    ah.textContent = avg+'s';
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+// HOOK INTO EXISTING FUNCTIONS
+// ══════════════════════════════════════════════════════════════
+// Patch tick to add session vol + trailing stop
+const _origTick = tick;
+tick = function(){
+  updateSession();
+  updateTrailingStop();
+  _origTick();
+};
+
+// Patch enterLong/enterShort for slippage + sound
+const _origLong = enterLong;
+enterLong = function(){
+  const instr = INSTRUMENTS[curInstr];
+  const slip = getSlippage();
+  if(slip>0) toast('⚡ Slippage: +'+Math.round(slip/instr.tickSize)+' tick fill','info');
+  _origLong();
+  if(document.getElementById('posBar').classList.contains('show')) playScalpSound('buy');
+};
+const _origShort = enterShort;
+enterShort = function(){
+  const instr = INSTRUMENTS[curInstr];
+  const slip = getSlippage();
+  if(slip>0) toast('⚡ Slippage: +'+Math.round(slip/instr.tickSize)+' tick fill','info');
+  _origShort();
+  if(document.getElementById('posBar').classList.contains('show')) playScalpSound('sell');
+};
+
+// Patch flatPosition for sound + equity + streak
+const _origFlat = flatPosition;
+flatPosition = function(reason){
+  if(!position) return;
+  const hadPosition = !!position;
+  _origFlat(reason);
+  if(hadPosition && tradeHistory.length){
+    const last = tradeHistory[0];
+    const won = last.pnl > 0;
+    if(reason==='stop') playScalpSound('stop');
+    else if(reason==='target') playScalpSound('target');
+    else playScalpSound(won?'target':'stop');
+    updateStreakStats(won);
+    equityCurve.push(balance);
+    drawEquityCurve();
+    partialClosed = false;
+    trailingStop = false;
+    document.getElementById('trailBtn').classList.remove('on');
+  }
+};
+
+// ══════════════════════════════════════════════════════════════
+// CHART OVERLAYS INJECTION into buildChart
+// ══════════════════════════════════════════════════════════════
+const _origBuildChart = buildChart;
+buildChart = function(){
+  _origBuildChart();
+  // After chart is built, add overlay annotations via plugin or canvas overlay
+  setTimeout(drawChartOverlays, 20);
+};
+
+function drawChartOverlays(){
+  if(!chart) return;
+  const ca = chart.chartArea;
+  const canvas = document.getElementById('chart');
+  // We use a separate overlay canvas
+  let oc = document.getElementById('overlayCanvas');
+  if(!oc){
+    oc = document.createElement('canvas');
+    oc.id = 'overlayCanvas';
+    oc.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:5;';
+    document.getElementById('mainWrap').appendChild(oc);
+  }
+  const chartEl = document.getElementById('chart');
+  oc.width = chartEl.offsetWidth;
+  oc.height = chartEl.offsetHeight;
+  const ctx = oc.getContext('2d');
+  ctx.clearRect(0,0,oc.width,oc.height);
+
+  if(showVWAP){
+    const hist = candles;
+    let sv=0,vv=0;
+    const vwaps = hist.map(c=>{ const tp=(c.h+c.l+c.c)/3; sv+=tp*c.v; vv+=c.v; return vv>0?sv/vv:c.c; });
+    const slice = candles.slice(-80);
+    const vwapSlice = vwaps.slice(-80);
+    ctx.strokeStyle = '#1abc9c';
+    ctx.lineWidth = 1.2;
+    ctx.setLineDash([4,3]);
+    ctx.beginPath();
+    vwapSlice.forEach((v,i)=>{
+      const x = ca.left + (i/(vwapSlice.length-1))*(ca.right-ca.left);
+      const y = chart.scales.y.getPixelForValue(v);
+      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    });
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle='#1abc9c';
+    ctx.font='9px JetBrains Mono';
+    ctx.fillText('VWAP $'+fmt(vwapSlice[vwapSlice.length-1]), ca.right+4, chart.scales.y.getPixelForValue(vwapSlice[vwapSlice.length-1])+3);
+  }
+
+  if(showPDHL){
+    const allH=candles.map(c=>c.h), allL=candles.map(c=>c.l);
+    const pdh=Math.max(...allH), pdl=Math.min(...allL);
+    [[pdh,'#ffd600','PDH'],[pdl,'#ff6d00','PDL']].forEach(([price,col,lbl])=>{
+      const y=chart.scales.y.getPixelForValue(price);
+      if(y<ca.top||y>ca.bottom) return;
+      ctx.strokeStyle=col; ctx.lineWidth=0.8; ctx.setLineDash([6,4]);
+      ctx.beginPath(); ctx.moveTo(ca.left,y); ctx.lineTo(ca.right,y); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle=col; ctx.font='8px JetBrains Mono';
+      ctx.fillText(lbl+' $'+fmt(price), ca.left+4, y-3);
+    });
+  }
+
+  if(showSR){
+    // Simple S/R: find price levels touched 3+ times
+    const tolerance = INSTRUMENTS[curInstr].tickSize * 3;
+    const levels = [];
+    candles.forEach(c=>{
+      [c.h,c.l].forEach(p=>{
+        const ex = levels.find(l=>Math.abs(l.price-p)<tolerance);
+        if(ex) ex.count++; else levels.push({price:p,count:1});
+      });
+    });
+    levels.filter(l=>l.count>=4).slice(0,8).forEach(l=>{
+      const y=chart.scales.y.getPixelForValue(l.price);
+      if(y<ca.top||y>ca.bottom) return;
+      const alpha = Math.min(l.count/10,0.6);
+      ctx.strokeStyle=`rgba(255,23,68,${alpha})`; ctx.lineWidth=0.7; ctx.setLineDash([3,5]);
+      ctx.beginPath(); ctx.moveTo(ca.left,y); ctx.lineTo(ca.right,y); ctx.stroke();
+      ctx.setLineDash([]);
+    });
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+// INIT PATCH
+// ══════════════════════════════════════════════════════════════
+
+
+
+// ══════════════════════════════════════════════════════════════
+// DRAWING ENGINE
+// ══════════════════════════════════════════════════════════════
+const DRAW_HINTS = {
+  none:     'Select a tool to draw on the chart',
+  hline:    'Click anywhere on the chart to place a horizontal line at that price',
+  vline:    'Click anywhere to place a vertical line at that time position',
+  trendline:'Click point 1, then click point 2 to draw an extended trendline',
+  fib:      'Click the swing LOW, then click the swing HIGH for Fibonacci levels',
+  rect:     'Click one corner, then click the opposite corner to draw a box',
+  measure:  'Click start price, then click end price — shows ticks, points & dollar value',
+  eraser:   'Click any drawing to delete it',
+};
+
+function setDraw(tool){
+  drawTool = tool;
+  drawIP = null;
+  document.querySelectorAll('.dtool').forEach(b=>b.classList.remove('active'));
+  const btn = document.getElementById('dt'+tool);
+  if(btn) btn.classList.add('active');
+  const dc = document.getElementById('drawCanvas');
+  if(dc) dc.classList.toggle('draw-active', tool !== 'none');
+  document.getElementById('drawHint').textContent = DRAW_HINTS[tool]||'';
+  redrawDrawings();
+}
+
+// ── Coordinate helpers ──
+function priceToY(price){
+  if(!chart) return null;
+  return chart.scales.y.getPixelForValue(price);
+}
+function yToPrice(y){
+  if(!chart) return null;
+  return chart.scales.y.getValueForPixel(y);
+}
+function xToIndex(x){
+  if(!chart) return null;
+  return chart.scales.x.getValueForPixel(x);
+}
+function indexToX(idx){
+  if(!chart) return null;
+  const ca = chart.chartArea;
+  const n = chart.data.labels.length;
+  return ca.left + (idx / Math.max(n-1,1)) * (ca.right - ca.left);
+}
+function getCA(){ return chart ? chart.chartArea : null; }
+
+// ── Canvas event setup (called once at boot) ──
+function initDrawCanvas(){
+  const dc = document.getElementById('drawCanvas');
+  if(!dc) return;
+
+  dc.addEventListener('click', e=>{
+    if(drawTool==='none') return;
+    const rect = dc.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const price = yToPrice(y);
+    const idx = xToIndex(x);
+    handleDrawClick(x, y, price, idx);
+  });
+
+  dc.addEventListener('mousemove', e=>{
+    if(drawTool==='none'||!drawIP) return;
+    const rect = dc.getBoundingClientRect();
+    drawIP.px = e.clientX - rect.left;
+    drawIP.py = e.clientY - rect.top;
+    drawIP.pp = yToPrice(drawIP.py);
+    drawIP.pi = xToIndex(drawIP.px);
+    redrawDrawings();
+  });
+}
+
+function handleDrawClick(x, y, price, idx){
+  const ca = getCA(); if(!ca||!chart) return;
+
+  if(drawTool === 'eraser'){
+    eraseAt(x, y); return;
+  }
+  if(drawTool === 'hline'){
+    drawings2.push({type:'hline', price, instr:curInstr});
+    redrawDrawings(); return;
+  }
+  if(drawTool === 'vline'){
+    drawings2.push({type:'vline', x, idx, instr:curInstr});
+    redrawDrawings(); return;
+  }
+  if(drawTool === 'trendline'){
+    if(!drawIP){
+      drawIP = {type:'trendline', x1:x, y1:y, p1:price, i1:idx};
+    } else {
+      drawings2.push({type:'trendline', x1:drawIP.x1, y1:drawIP.y1, p1:drawIP.p1, i1:drawIP.i1, x2:x, y2:y, p2:price, i2:idx, instr:curInstr});
+      drawIP = null; redrawDrawings();
+    }
+    return;
+  }
+  if(drawTool === 'fib'){
+    if(!drawIP){
+      drawIP = {type:'fib', x1:x, y1:y, p1:price};
+    } else {
+      drawings2.push({type:'fib', p1:drawIP.p1, p2:price, instr:curInstr});
+      drawIP = null; redrawDrawings();
+    }
+    return;
+  }
+  if(drawTool === 'rect'){
+    if(!drawIP){
+      drawIP = {type:'rect', x1:x, y1:y, p1:price, i1:idx};
+    } else {
+      drawings2.push({type:'rect', x1:drawIP.x1, y1:drawIP.y1, p1:drawIP.p1, i1:drawIP.i1, x2:x, y2:y, p2:price, i2:idx, instr:curInstr});
+      drawIP = null; redrawDrawings();
+    }
+    return;
+  }
+  if(drawTool === 'measure'){
+    if(!drawIP){
+      drawIP = {type:'measure', x1:x, y1:y, p1:price};
+    } else {
+      drawings2.push({type:'measure', x1:drawIP.x1, y1:drawIP.y1, p1:drawIP.p1, x2:x, y2:y, p2:price, instr:curInstr});
+      drawIP = null; redrawDrawings();
+    }
+    return;
+  }
+}
+
+function eraseAt(mx, my){
+  const THRESH = 10;
+  const before = drawings2.length;
+  drawings2 = drawings2.filter(d=>{
+    if(d.instr !== curInstr) return true;
+    if(d.type==='hline'){
+      const py = priceToY(d.price);
+      return py===null || Math.abs(my-py) > THRESH;
+    }
+    if(d.type==='vline'){
+      return Math.abs(mx-d.x) > THRESH;
+    }
+    if(d.type==='trendline'){
+      return distSeg(mx,my,d.x1,d.y1,d.x2,d.y2) > THRESH;
+    }
+    if(d.type==='rect'){
+      const x1=Math.min(d.x1,d.x2),x2=Math.max(d.x1,d.x2);
+      const y1=Math.min(d.y1,d.y2),y2=Math.max(d.y1,d.y2);
+      return !(mx>=x1-THRESH&&mx<=x2+THRESH&&my>=y1-THRESH&&my<=y2+THRESH);
+    }
+    if(d.type==='fib'||d.type==='measure'){
+      const py1=priceToY(d.p1),py2=priceToY(d.p2);
+      return Math.abs(my-py1)>THRESH && Math.abs(my-py2)>THRESH;
+    }
+    return true;
+  });
+  if(drawings2.length < before) redrawDrawings();
+}
+
+function distSeg(px,py,x1,y1,x2,y2){
+  const dx=x2-x1,dy=y2-y1,lenSq=dx*dx+dy*dy;
+  if(lenSq===0) return Math.hypot(px-x1,py-y1);
+  let t=((px-x1)*dx+(py-y1)*dy)/lenSq;
+  t=Math.max(0,Math.min(1,t));
+  return Math.hypot(px-x1-t*dx,py-y1-t*dy);
+}
+
+function clearDrawings(){
+  drawings2 = drawings2.filter(d=>d.instr!==curInstr);
+  redrawDrawings();
+  toast('Drawings cleared','info');
+}
+
+// ── MAIN RENDERER ──
+function redrawDrawings(){
+  const dc = document.getElementById('drawCanvas');
+  if(!dc||!chart) return;
+  const ca = chart.chartArea;
+  dc.width = dc.offsetWidth;
+  dc.height = dc.offsetHeight;
+  const ctx = dc.getContext('2d');
+  ctx.clearRect(0,0,dc.width,dc.height);
+
+  // Draw saved drawings for current instrument
+  drawings2.filter(d=>d.instr===curInstr).forEach(d=>renderDrawing(ctx,d,ca));
+
+  // Draw in-progress preview
+  if(drawIP) renderPreview(ctx,drawIP,ca);
+}
+
+function renderDrawing(ctx, d, ca){
+  ctx.save();
+  if(d.type==='hline'){
+    const py = priceToY(d.price);
+    if(py===null||py<ca.top-5||py>ca.bottom+5){ctx.restore();return;}
+    ctx.setLineDash([5,4]);
+    ctx.strokeStyle='rgba(255,214,0,0.85)';
+    ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(ca.left,py); ctx.lineTo(ca.right,py); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle='rgba(255,214,0,0.9)';
+    ctx.font='9px JetBrains Mono';
+    ctx.textAlign='left';
+    const instr=INSTRUMENTS[curInstr];
+    ctx.fillText('$'+fmt(d.price), ca.right+4, py+3);
+  }
+  else if(d.type==='vline'){
+    ctx.setLineDash([4,4]);
+    ctx.strokeStyle='rgba(0,200,255,0.5)';
+    ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(d.x,ca.top); ctx.lineTo(d.x,ca.bottom); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  else if(d.type==='trendline'){
+    // Extend line across full chart
+    const slope = (d.y2-d.y1)/(d.x2-d.x1||1);
+    const yLeft = d.y1 + slope*(ca.left-d.x1);
+    const yRight = d.y1 + slope*(ca.right-d.x1);
+    ctx.setLineDash([]);
+    ctx.strokeStyle='rgba(0,200,255,0.85)';
+    ctx.lineWidth=1.2;
+    ctx.beginPath(); ctx.moveTo(ca.left,yLeft); ctx.lineTo(ca.right,yRight); ctx.stroke();
+    // Anchor dots
+    ctx.fillStyle='rgba(0,200,255,0.9)';
+    [d.x1,d.x2].forEach((x,i)=>{ ctx.beginPath(); ctx.arc(x,[d.y1,d.y2][i],3,0,Math.PI*2); ctx.fill(); });
+  }
+  else if(d.type==='fib'){
+    const FIB_LEVELS=[0,0.236,0.382,0.5,0.618,0.786,1];
+    const FIB_COLS=['rgba(255,71,87,0.7)','rgba(255,107,53,0.7)','rgba(255,214,0,0.7)','rgba(255,255,255,0.35)','rgba(0,200,255,0.7)','rgba(168,85,247,0.7)','rgba(0,230,118,0.7)'];
+    const range=d.p2-d.p1;
+    FIB_LEVELS.forEach((lvl,i)=>{
+      const price=d.p1+range*lvl;
+      const py=priceToY(price);
+      if(py===null||py<ca.top-5||py>ca.bottom+5) return;
+      ctx.beginPath(); ctx.setLineDash([3,4]);
+      ctx.strokeStyle=FIB_COLS[i]; ctx.lineWidth=0.9;
+      ctx.moveTo(ca.left,py); ctx.lineTo(ca.right,py); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle=FIB_COLS[i]; ctx.font='8px JetBrains Mono'; ctx.textAlign='left';
+      ctx.fillText((lvl*100).toFixed(1)+'%  $'+fmt(price), ca.left+4, py-3);
+    });
+  }
+  else if(d.type==='rect'){
+    const x1=Math.min(d.x1,d.x2),x2=Math.max(d.x1,d.x2);
+    const y1=Math.min(d.y1,d.y2),y2=Math.max(d.y1,d.y2);
+    ctx.setLineDash([]);
+    ctx.strokeStyle='rgba(168,85,247,0.8)';
+    ctx.fillStyle='rgba(168,85,247,0.06)';
+    ctx.lineWidth=1;
+    ctx.fillRect(x1,y1,x2-x1,y2-y1);
+    ctx.strokeRect(x1,y1,x2-x1,y2-y1);
+    ctx.fillStyle='rgba(168,85,247,0.85)'; ctx.font='8px JetBrains Mono'; ctx.textAlign='left';
+    ctx.fillText('$'+fmt(d.p1), x1+3, y1-3);
+    ctx.fillText('$'+fmt(d.p2), x1+3, y2+10);
+  }
+  else if(d.type==='measure'){
+    const py1=priceToY(d.p1), py2=priceToY(d.p2);
+    if(py1===null||py2===null){ctx.restore();return;}
+    const instr=INSTRUMENTS[curInstr];
+    const ticks=Math.round(Math.abs(d.p2-d.p1)/instr.tickSize);
+    const pts=(Math.abs(d.p2-d.p1)/(instr.tickSize*4)).toFixed(1);
+    const dollars=(ticks*instr.tickVal).toFixed(2);
+    const isUp=d.p2>d.p1;
+    const col=isUp?'rgba(0,230,118,0.85)':'rgba(255,23,68,0.85)';
+    // Box
+    const bx=Math.min(d.x1,d.x2), bw=Math.max(Math.abs(d.x2-d.x1),120);
+    const by=Math.min(py1,py2), bh=Math.abs(py2-py1);
+    ctx.fillStyle=isUp?'rgba(0,230,118,0.06)':'rgba(255,23,68,0.06)';
+    ctx.fillRect(bx,by,bw,bh);
+    ctx.setLineDash([3,3]);
+    ctx.strokeStyle=col; ctx.lineWidth=0.8;
+    ctx.strokeRect(bx,by,bw,bh);
+    // Horizontal price lines
+    ctx.beginPath(); ctx.moveTo(ca.left,py1); ctx.lineTo(ca.right,py1); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(ca.left,py2); ctx.lineTo(ca.right,py2); ctx.stroke();
+    ctx.setLineDash([]);
+    // Arrow
+    ctx.strokeStyle=col; ctx.lineWidth=1.2;
+    ctx.beginPath(); ctx.moveTo(d.x1,py1); ctx.lineTo(d.x1,py2); ctx.stroke();
+    // Arrowheads
+    const ady=isUp?-6:6;
+    ctx.beginPath(); ctx.moveTo(d.x1,py2); ctx.lineTo(d.x1-4,py2-ady); ctx.moveTo(d.x1,py2); ctx.lineTo(d.x1+4,py2-ady); ctx.stroke();
+    // Label box
+    const lx=d.x1+8, ly=(py1+py2)/2;
+    ctx.fillStyle='rgba(9,13,18,0.9)';
+    ctx.fillRect(lx-3,ly-30,130,52);
+    ctx.strokeStyle=col; ctx.lineWidth=0.7;
+    ctx.strokeRect(lx-3,ly-30,130,52);
+    ctx.fillStyle=col; ctx.font='bold 10px JetBrains Mono'; ctx.textAlign='left';
+    ctx.fillText((isUp?'▲ +':' ▼ -')+ticks+' ticks', lx+2, ly-14);
+    ctx.font='9px JetBrains Mono'; ctx.fillStyle='rgba(255,255,255,0.6)';
+    ctx.fillText(pts+' pts  ($'+dollars+')', lx+2, ly+2);
+    ctx.fillText('$'+fmt(d.p1)+' → $'+fmt(d.p2), lx+2, ly+16);
+  }
+  ctx.restore();
+}
+
+function renderPreview(ctx, d, ca){
+  if(!d.px||!d.py) return;
+  ctx.save(); ctx.globalAlpha=0.5;
+  if(d.type==='trendline'){
+    ctx.setLineDash([4,4]); ctx.strokeStyle='#00c8ff'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(d.x1,d.y1); ctx.lineTo(d.px,d.py); ctx.stroke();
+    ctx.fillStyle='#00c8ff';
+    ctx.beginPath(); ctx.arc(d.x1,d.y1,3,0,Math.PI*2); ctx.fill();
+  }
+  else if(d.type==='fib'||d.type==='measure'||d.type==='rect'){
+    ctx.setLineDash([4,4]);
+    ctx.strokeStyle=d.type==='rect'?'#a855f7':d.type==='measure'?'#00e676':'#ffd600';
+    ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(d.x1,d.y1); ctx.lineTo(d.px,d.py); ctx.stroke();
+    ctx.fillStyle=ctx.strokeStyle;
+    ctx.beginPath(); ctx.arc(d.x1,d.y1,3,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(d.px,d.py,3,0,Math.PI*2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+// Hook redrawDrawings into buildChart
+const _origBC = buildChart;
+buildChart = function(){
+  _origBC();
+  setTimeout(redrawDrawings, 35);
+};
+
+</script>
+</body>
+</html>
